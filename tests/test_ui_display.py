@@ -124,7 +124,7 @@ class DisplayUiTests(unittest.TestCase):
         session.ui_state.pop('display')
         self.window.open_cine('fake.cine', session)
         wait_for(lambda: self.window.current_record is not None)
-        self.assertEqual(panel.settings, DisplaySettings())
+        self.assertEqual(panel.settings, DisplaySettings(mode='photometric_ref90'))
         session.ui_state['display'] = {'gamma': 0}
         with patch.object(QMessageBox, 'warning') as warning:
             self.window.open_cine('fake.cine', session)

@@ -5,10 +5,12 @@ from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                                QSlider, QDoubleSpinBox, QPushButton)
 from ...display import DisplaySettings, display_modes
+from ...display.photometric import MODE, PRESET_ID, REFERENCE_FRACTION
 
 
 class DisplayPanel(QWidget):
     changed = Signal(object)
+    recalculate_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,6 +54,14 @@ class DisplayPanel(QWidget):
             auto_layout.addWidget(control)
             control.valueChanged.connect(lambda value, field=name: self._percentile_changed(field, value))
         layout.addWidget(self.auto_controls)
+        self.photometric_info = QLabel("Photometric reference: no Cine open")
+        self.photometric_info.setWordWrap(True)
+        self.photometric_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self.photometric_info)
+        self.recalculate_button = QPushButton("Recalculate Reference")
+        self.recalculate_button.setEnabled(False)
+        self.recalculate_button.clicked.connect(self.recalculate_requested.emit)
+        layout.addWidget(self.recalculate_button)
         self.reset_button = QPushButton("Reset Display")
         self.reset_button.clicked.connect(self.reset)
         layout.addWidget(self.reset_button)
@@ -91,6 +101,27 @@ class DisplayPanel(QWidget):
 
     def show_raw(self):
         self.set_settings(replace(self.settings, mode="raw"))
+
+    def show_photometric(self):
+        self.set_settings(replace(self.settings, mode=MODE))
+
+    def set_photometric(self, reference=None, error=None, cine_open=False):
+        self.recalculate_button.setEnabled(cine_open)
+        if reference is None:
+            state = ("PHOTOMETRIC_REFERENCE_FAILED\n" + error if error else
+                     "Initializing Photometric Ref90..." if cine_open else "No Cine open")
+            text = f"Preset: {PRESET_ID}\nReference fraction: {REFERENCE_FRACTION:.0%}\nStatus: {state}"
+        else:
+            text = (f"Preset: {reference.preset_id}\n"
+                    f"Reference frame: {reference.reference_frame_index}\n"
+                    f"Reference fraction: {reference.reference_fraction:.0%}\n"
+                    f"Reference P90: {reference.reference_p90:g}\n"
+                    f"Target P90: {reference.target_p90:g}\n"
+                    f"Raw gain: {reference.gain_raw:.6g}\n"
+                    f"Applied gain: {reference.gain_used:.6g}\n"
+                    f"Reference saturation (255): {reference.norm_255_fraction:.3%}\n"
+                    f"Status: {reference.photometric_status}")
+        self.photometric_info.setText(text)
 
     def show_enhanced(self):
         self.set_settings(replace(self.settings, mode=self.previous_enhanced_mode))

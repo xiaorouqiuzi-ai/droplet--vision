@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Optional, Tuple
 import numpy as np
 from .settings import DisplaySettings
+from .photometric import MODE, PhotometricReference, apply_locked_gain
 
 
 @dataclass
@@ -32,11 +33,16 @@ def _percentile(image: np.ndarray, settings: DisplaySettings) -> DisplayResult:
     return DisplayResult(np.rint(np.clip(values, 0, 1) * 255).astype(np.uint8))
 
 
+def _reference_unavailable(image: np.ndarray, settings: DisplaySettings) -> DisplayResult:
+    return DisplayResult(image.copy(), "Photometric Ref90 unavailable; Raw display used.")
+
+
 # Future display backends can register without changing the settings schema.
 _MODES: Dict[str, Tuple[str, Callable[[np.ndarray, DisplaySettings], DisplayResult]]] = {
     "raw": ("Raw", _raw),
     "manual": ("Manual", _manual),
     "auto_percentile": ("Auto contrast", _percentile),
+    MODE: ("Photometric Ref90 v1", _reference_unavailable),
 }
 
 
@@ -52,7 +58,8 @@ def display_modes() -> Dict[str, str]:
     return {mode: value[0] for mode, value in _MODES.items()}
 
 
-def render_display(image: np.ndarray, settings: DisplaySettings) -> DisplayResult:
+def render_display(image: np.ndarray, settings: DisplaySettings,
+                   photometric: Optional[PhotometricReference] = None) -> DisplayResult:
     """Return independent uint8 pixels and display-only diagnostics.
 
     uint16 grayscale retains the existing fixed //256 reference mapping before
@@ -61,6 +68,8 @@ def render_display(image: np.ndarray, settings: DisplaySettings) -> DisplayResul
     """
     if not isinstance(image, np.ndarray) or not image.size:
         raise ValueError("Display input must be a nonempty ndarray")
+    if settings.mode == MODE and photometric is not None:
+        return DisplayResult(apply_locked_gain(image, photometric), photometric.photometric_status)
     if image.ndim == 2 and image.dtype == np.uint16:
         reference = (image // 256).astype(np.uint8)
     elif image.dtype == np.uint8 and (image.ndim == 2 or image.ndim == 3 and image.shape[2] == 3):

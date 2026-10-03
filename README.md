@@ -127,7 +127,7 @@ and restart the Viewer to show it, without editing UI Python. See
 
 ### Display enhancement
 
-Viewer supports display-only Raw, Brightness, Contrast, Gamma and Percentile
+Viewer supports display-only Photometric Ref90, Raw, Brightness, Contrast, Gamma and Percentile
 auto-stretch in the Display panel. Display Enhancement v1 is implemented on main.
 
 **DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA**
@@ -139,7 +139,7 @@ Enhanced pixels must not be used for scientific grayscale statistics, cavity
 intensity analysis or physical interpretation. Bright/dark appearance alone
 does not establish a bubble or liquid phase identity.
 
-Use **R** for Raw and **E** for the previous enhanced mode (Manual initially).
+Use **R** for Raw, **P** for Photometric Ref90 and **E** for the previous enhanced mode.
 Manual offers Brightness -100 to +100, Contrast 0.25 to 4.00 and Gamma 0.20 to
 5.00. Auto contrast defaults to the 1st–99th percentiles. Reset Display restores
 Raw and all display defaults without changing the frame, zoom or annotations.
@@ -148,6 +148,23 @@ are required. See [preprocessing policy](docs/image_preprocessing_policy.md).
 
 A human-reviewed photometric preprocessing candidate preset is available at
 `configs/photometry/photometric_ref90_v1.json`; see `docs/photometric_presets.md`.
+
+### Default photometric display
+
+The Viewer defaults to the human-reviewed `photometric_ref90_v1` display preset.
+For each Cine, a reference frame at 3% of its frame range
+(`round((frame_count - 1) * 0.03)`) is used to compute one P90-based gain.
+The same gain is locked for the full Cine; navigation never re-estimates it.
+Reference initialization runs in the background. Only reopening the Cine or
+clicking **Recalculate Reference** recomputes the gain. The Display panel shows
+reference statistics, the applied gain and QC warnings; failure falls back to Raw.
+
+Raw pixels remain unchanged. Scientific intensity analysis always uses raw
+pixels. Users can switch to Raw display at any time; **Export Current Frame
+exports raw scientific pixels**. Manual and Auto remain independent modes.
+Parameters come from the frozen [JSON preset](configs/photometry/photometric_ref90_v1.json);
+see [preset provenance and usage](docs/photometric_presets.md). This Viewer display
+integration does not enable model preprocessing or training.
 
 ## Organization
 
@@ -179,6 +196,10 @@ Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
 
+- Default Photometric Ref90 display: load the accepted JSON preset and estimate
+  one gain from the Cine's 3% reference frame asynchronously; preserve that gain
+  across navigation, with Raw override, reference QC and session provenance.
+  Raw pixels, PNG export, geometry and scientific timing remain unchanged.
 - Display Enhancement v1 is implemented on main: added Raw/Manual/Percentile
   display modes with brightness, contrast and gamma controls, R/E comparison,
   reset and session persistence. Transforms operate on independent display

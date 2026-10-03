@@ -2,8 +2,8 @@
 
 Implemented on main.
 
-Display Enhancement v1 is implemented on main, with Raw, Manual and Auto
-percentile display modes. These three paths remain independent:
+Display Enhancement v1 is implemented on main, with default Photometric Ref90,
+Raw, Manual and Auto percentile display modes. These three data paths remain independent:
 
 - Display pipeline: raw frame → independent display transform → QImage.
 - Scientific pipeline: raw frame → scientific measurement.
@@ -20,8 +20,10 @@ No Qt dependency enters core, Cine, annotations or inference interfaces.
 `ui.app` starts Qt; `MainWindow` composes metadata, taxonomy, layers, bookmarks,
 Graphics View canvas, timeline and transport widgets. `CineController` owns a
 single worker pool and serializes all reader/cache access. Only one I/O task is
-active and one newest pending task is retained. Tokens reject stale opens,
-frame responses and failures. Closing invalidates outstanding requests; app
+active and one newest pending navigation/control task is retained, plus one
+pending explicit reference recalculation. Separate reference revisions and
+frame tokens reject stale opens, references, frame responses and failures.
+Closing invalidates outstanding requests; app
 shutdown waits for running I/O before closing the file handle.
 
 `FrameCache` stores raw arrays with a configurable default limit of 64 frames.
@@ -38,7 +40,7 @@ F fits the image. Overlay scene coordinates equal original image coordinates.
 data. Scientific values and PNG export continue to use raw arrays.
 
 The unchanged display above is the **Raw** reference mode. The Display panel
-now also offers Manual and Auto contrast; these operate on independent copies
+also offers Photometric Ref90, Manual and Auto contrast; these operate on independent copies
 between the raw cache and QImage. `droplet_vision.display` uses NumPy and has no
 Qt dependency. CineReader and FrameCache retain raw pixels. Changing settings
 rerenders only the current cached image, without requesting or decoding a frame.
@@ -54,12 +56,13 @@ Adjusting settings uses the current raw cached frame without rereading Cine,
 modifying FrameCache, altering annotations or changing timestamps.
 
 - Raw: uint8 grayscale/RGB values are preserved exactly in an independent array.
+- Photometric Ref90 v1: apply one locked Cine reference gain, as described below.
 - Manual: normalize the display reference to `u = pixel / 255`, then compute
   `v = clip((u - 0.5) * contrast + 0.5 + brightness, 0, 1)`, followed by
   `round_to_even(255 * v**gamma)` as uint8. UI Brightness -100..100 maps to
   -1..1; Contrast is 0.25..4; Gamma is 0.2..5. Gamma 1 is neutral. With this
   display formula, a smaller gamma brightens midtones; it is not a physical
-  correction. Manual parameters are inactive in Raw/Auto modes.
+  correction. Manual parameters are inactive in Raw/Auto/Ref90 modes.
 - Auto contrast: compute NumPy's linear percentiles over the display reference
   (default 1 and 99), map low to 0 and high to 255, clip and round to uint8.
   RGB uses a shared range over all channels, not independent channel balancing.
@@ -73,17 +76,18 @@ enhancement. This is deliberately limited display support, not full-depth
 scientific processing. Inputs, dtype and shape remain unchanged; outputs are
 independent uint8 arrays with the same geometry. No resampling takes place.
 
-R switches to Raw; E restores the previous non-Raw mode (initially Manual).
+R switches to Raw; P selects Ref90; E restores the previous non-Raw mode
+(Ref90 after a normal Cine open).
 Reset Display restores Raw, brightness 0, contrast/gamma 1 and percentiles 1/99,
 without resetting frame position, zoom/pan, overlays, bookmarks or notes. The
 status bar always names the display mode and marks active enhancement. Display
 diagnostics are separate from the raw Metadata panel. Export Current Frame
 always exports raw pixels, regardless of the visible mode; its tooltip says
-"Exports raw frame pixels, not display-enhanced preview."
+"Export Current Frame exports raw scientific pixels, not display-enhanced preview."
 
 ViewerSession saves `ui_state.display` using DisplaySettings serialization.
-Opening a new Cine starts in Raw; a matching loaded session restores its display
-state. Old sessions without this field use defaults. Invalid/unavailable settings
+Opening a new Cine starts in Ref90; a matching loaded session restores its display
+mode. Old sessions without this field use Ref90. Invalid/unavailable settings
 produce a warning and fall back to Raw. No display settings enter annotation
 geometry or scientific metadata. Modes use extensible string IDs and a display
 backend registry; registering a backend before constructing the panel adds its
@@ -91,6 +95,52 @@ mode to the selector. Additional backend-specific controls remain future work.
 No CLAHE, histogram widget or Display Preview export is implemented in this update.
 See [image preprocessing policy](image_preprocessing_policy.md) for the required
 separation from model preprocessing and scientific intensity analysis.
+
+## Photometric Ref90: default Cine-locked display
+
+The Viewer reads `configs/photometry/photometric_ref90_v1.json` as the single
+source of photometric parameters. The frozen v1 preset is unchanged. The
+Qt-independent `display.photometric` module loads and validates the contract,
+estimates a reference and applies its scalar gain to independent display arrays.
+
+Opening a Cine asynchronously reads the raw frame at
+`clamp(round((frame_count - 1) * 0.03), 0, frame_count - 1)`.
+Its raw whole-image P90 determines the gain from the preset target and bounds.
+The worker caches that raw reference frame and retains one immutable gain record
+for the Cine. **No per-frame renormalization** occurs during navigation or
+playback. Ref90 never stacks gamma, offsets, Manual settings or percentile stretch.
+
+Only reopening a Cine or explicitly clicking **Recalculate Reference** re-reads
+the reference and recalculates the gain. While initialization is pending, the UI
+reports `Initializing Photometric Ref90...`; any available current frame uses
+Raw until ready. The gain then rerenders that same current frame. Switching to
+Raw/Manual/Auto while waiting is respected. A separate reference request revision
+prevents a stale recalculation from affecting another Cine; navigation cannot
+discard an explicit recalculation.
+
+The Display panel reports preset ID, reference frame/fraction/P90, target P90,
+raw/applied gain, reference saturation fraction and QC status. Gain clipping,
+high gain and saturation thresholds come from the JSON. Warnings do not trigger
+an automatic corrective pass. Nonpositive P90, reference read failures and
+unsupported reference pixels produce `PHOTOMETRIC_REFERENCE_FAILED`; Ref90 falls
+back to Raw with a visible explanation. This v1 preset supports uint8 grayscale;
+RGB/uint16 retain the existing Raw/Manual/Auto behavior.
+
+`ui_state.photometric` in ViewerSession records preset ID/version/hash,
+reference fraction/index/P90, target, gains, reference saturation and status.
+It is UI/preprocessing provenance, never FrameResult or scientific metadata.
+Loading a session restores its display mode but recomputes the reference on
+reopen, rather than trusting a saved gain against possibly changed input data.
+
+Raw Cine, raw cache, raw exports and scientific intensity sources remain
+unchanged. Point/bbox/polygon overlays stay in raw image coordinates. R and P
+allow immediate Raw/Ref90 comparison without disk reads. Reset Display still
+chooses Raw and preserves the current frame, zoom, annotations and bookmarks.
+There is no normalized export command in this integration.
+
+Future dataset exporters or model preprocessing may explicitly load the same
+[versioned preset](photometric_presets.md) for reproducibility. Viewer display
+settings are not silently forwarded to PredictionProvider or training.
 
 ## Navigation and timing
 

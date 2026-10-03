@@ -27,12 +27,14 @@ contrast stretch or denoising is included.
   reaching its P90 target does not guarantee uniform visual backgrounds or
   future performance. High gain and saturation warnings remain relevant.
 
-The JSON preset is the **single source of truth**. Future Viewer, dataset
-exporter, YOLO and U-Net integrations that explicitly opt into this candidate
+The JSON preset is the **single source of truth**. The Viewer now reads it for
+default Cine-locked Ref90 display, estimating one gain from the 3% reference
+frame; see [Viewer behavior](cine_viewer.md#photometric-ref90-default-cine-locked-display).
+Future dataset exporter, YOLO and U-Net integrations that explicitly opt into this candidate
 must load it, rather than hardcode its reference statistic, target fraction,
-target intensity or gain bounds in Python. Recording the preset does not
-implement or activate a normalization backend, change the Viewer, or silently
-enable training preprocessing.
+target intensity or gain bounds in Python. The current integration is display
+only; it does not implement a dataset normalization backend or enable training
+preprocessing. Raw export continues to preserve raw scientific pixels.
 
 Changing the reference, target fraction, metric or gain rules requires a new
 **v2 preset**. Do not silently alter v1 or recompute its accepted gain bounds

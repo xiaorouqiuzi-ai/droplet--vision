@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QSplitter,
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
 from ..annotations.taxonomy import load_taxonomy, default_taxonomy_path
 from ..display import DisplaySettings, render_display
+from ..display.photometric import MODE, PRESET_ID, REFERENCE_FRACTION
 from .cine_controller import CineController
 from .display import export_png
 from .widgets.image_canvas import ImageCanvas
@@ -79,12 +80,14 @@ class MainWindow(QMainWindow):
         self.display_label = QLabel("Display: RAW")
         self.statusBar().addPermanentWidget(self.display_label)
         self.display_panel.changed.connect(self.refresh_display)
+        self.display_panel.recalculate_requested.connect(self.controller.recalculate_reference)
         self.playback = QTimer(self)
         self.playback.setInterval(100)
         self.playback.timeout.connect(self._tick)
         self.controller.opened.connect(self._opened)
         self.controller.frame_ready.connect(self._frame_ready)
         self.controller.failed.connect(self._error)
+        self.controller.photometric_changed.connect(self._photometric_changed)
         self._menus()
         self.transport.setEnabled(False)
         self.statusBar().showMessage("Open a Cine to begin. Display pixels are separate from scientific raw values.")
@@ -102,7 +105,7 @@ class MainWindow(QMainWindow):
         self._action(file_menu, "Open Cine...", self.open_dialog, "Ctrl+O")
         self._action(file_menu, "Close Cine", self.close_cine)
         self.export_action = self._action(file_menu, "Export Current Frame...", self.export_dialog, "Ctrl+E")
-        self.export_action.setToolTip("Exports raw frame pixels, not display-enhanced preview.")
+        self.export_action.setToolTip("Export Current Frame exports raw scientific pixels, not display-enhanced preview.")
         self.export_action.setStatusTip(self.export_action.toolTip())
         self._action(file_menu, "Save Session As...", self.save_session_dialog, "Ctrl+S")
         self._action(file_menu, "Load Session...", self.load_session_dialog, "Ctrl+L")
@@ -110,6 +113,7 @@ class MainWindow(QMainWindow):
         view = self.menuBar().addMenu("View")
         view.addAction(self.display_dock.toggleViewAction())
         self._action(view, "Raw display", self.display_panel.show_raw, "R")
+        self._action(view, "Photometric Ref90 v1", self.display_panel.show_photometric, "P")
         self._action(view, "Enhanced display (previous mode)", self.display_panel.show_enhanced, "E")
         self._action(view, "Reset Display", self.display_panel.reset)
         self._action(view, "Fit image", self.canvas.fit_image, "F")
@@ -145,6 +149,7 @@ class MainWindow(QMainWindow):
         self.canvas.clear_image()
         self.raw_image = self.current_record = self.metadata = self.session = None
         self.display_panel.reset()
+        self.display_panel.set_photometric()
         self.time_label.setText("Relative timestamp: unknown")
         self.metadata_panel.setPlainText("No Cine open")
         self.bookmarks_list.clear()
@@ -156,7 +161,10 @@ class MainWindow(QMainWindow):
         self._reset()
         self.cine_path = Path(path)
         self._pending_session = session
-        self.statusBar().showMessage("Opening Cine...")
+        self.display_panel.show_photometric()
+        self.display_panel.set_photometric(cine_open=True)
+        self.display_panel.recalculate_button.setEnabled(False)
+        self.statusBar().showMessage("Opening Cine; Initializing Photometric Ref90...")
         self.controller.open(path)
 
     def _opened(self, metadata, timing):
@@ -176,12 +184,20 @@ class MainWindow(QMainWindow):
                 if fps in (1, 2, 5, 10, 15, 20, 30):
                     self.transport.fps.setCurrentText(str(fps))
                 try:
-                    self.display_panel.set_settings(DisplaySettings.from_dict(pending.ui_state.get("display", {})))
+                    self.display_panel.set_settings(DisplaySettings.from_dict(
+                        pending.ui_state.get("display", {"mode": MODE})))
                 except (TypeError, ValueError) as error:
                     self.display_panel.reset()
                     self._error("Invalid session display settings; using Raw: " + str(error))
                 self._update_bookmarks()
+        self._photometric_changed()
         self.navigate(self.session.last_frame)
+
+    def _photometric_changed(self):
+        self.display_panel.set_photometric(self.controller.photometric,
+                                           self.controller.photometric_error,
+                                           cine_open=self.metadata is not None)
+        self.refresh_display()
 
     def navigate(self, index):
         if self.metadata is None:
@@ -210,16 +226,28 @@ class MainWindow(QMainWindow):
 
     def refresh_display(self, settings=None):
         settings = self.display_panel.settings
+        if settings.mode == MODE and self.controller.photometric_error:
+            # Keep the user's Raw/Manual/Auto override when a background reference fails.
+            self.display_panel.show_raw()
+            self.statusBar().showMessage(
+                "PHOTOMETRIC_REFERENCE_FAILED: Photometric Ref90 unavailable; Raw display used.")
+            return
         mode = settings.mode.upper()
         if settings.mode == "auto_percentile":
             mode = f"AUTO {settings.percentile_low:g}–{settings.percentile_high:g}%"
         self.display_label.setText("Display: " + mode)
         if self.raw_image is None:
             return
-        result = render_display(self.raw_image, settings)
+        result = render_display(self.raw_image, settings, photometric=self.controller.photometric)
         self.canvas.set_image(result.image)
         message = ("Raw display reference; zoom/display do not alter scientific pixels."
                    if settings.mode == "raw" else "Display enhancement active — raw scientific pixels unchanged.")
+        if settings.mode == MODE:
+            message = ("Photometric Ref90 active — Cine-locked gain; raw scientific pixels unchanged."
+                       if self.controller.photometric is not None else
+                       "Initializing Photometric Ref90... Raw display used while waiting.")
+        elif settings.mode == "raw" and self.controller.photometric_error:
+            message = "PHOTOMETRIC_REFERENCE_FAILED: Photometric Ref90 unavailable; Raw display used."
         self.statusBar().showMessage(message + (" " + result.diagnostic if result.diagnostic else ""))
 
     def refresh_overlays(self):
@@ -316,6 +344,11 @@ class MainWindow(QMainWindow):
             raise ValueError("No Cine session")
         self.session.ui_state.update(review_playback_fps=self.controller.state.playback_fps,
                                      display=self.display_panel.settings.to_dict())
+        self.session.ui_state["photometric"] = (
+            self.controller.photometric.to_dict() if self.controller.photometric is not None else {
+                "preset_id": PRESET_ID, "reference_fraction": REFERENCE_FRACTION,
+                "photometric_status": "PHOTOMETRIC_REFERENCE_FAILED" if self.controller.photometric_error else "INITIALIZING",
+                "error": self.controller.photometric_error})
         self.session.save(path)
 
     def save_session_dialog(self):
