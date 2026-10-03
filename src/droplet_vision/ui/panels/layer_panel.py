@@ -1,5 +1,5 @@
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QComboBox
 
 
 class LayerPanel(QWidget):
@@ -9,6 +9,14 @@ class LayerPanel(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Layers"))
+        self.layers = layers
+        self.active_layer = QComboBox()
+        self.drawing_into = QLabel("Drawing into: Manual")
+        for layer in layers:
+            self.active_layer.addItem(layer.name, layer.layer_id)
+        self.active_layer.currentIndexChanged.connect(self._active_changed)
+        layout.addWidget(self.active_layer)
+        layout.addWidget(self.drawing_into)
         for layer in layers:
             row = QHBoxLayout()
             visible = QCheckBox(layer.name)
@@ -20,7 +28,19 @@ class LayerPanel(QWidget):
             row.addWidget(visible)
             row.addWidget(lock)
             layout.addLayout(row)
+        self._update_choices()
+
+    def _active_changed(self):
+        self.drawing_into.setText("Drawing into: " + self.active_layer.currentText())
+        self.changed.emit()
+
+    def _update_choices(self):
+        for index, layer in enumerate(self.layers):
+            item = self.active_layer.model().item(index)
+            if item is not None:
+                item.setEnabled(not layer.locked and layer.role in ("manual", "reviewed") and layer.visible)
 
     def _set(self, layer, key, value):
         setattr(layer, key, value)
+        self._update_choices()
         self.changed.emit()

@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QSplitter,
-                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget)
+                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea)
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
 from ..annotations.taxonomy import load_taxonomy, default_taxonomy_path
 from ..display import DisplaySettings, render_display
@@ -18,6 +18,7 @@ from .panels.metadata_panel import MetadataPanel
 from .panels.annotation_panel import AnnotationPanel
 from .panels.layer_panel import LayerPanel
 from .panels.display_panel import DisplayPanel
+from .annotation_editor import AnnotationEditor
 
 
 class MainWindow(QMainWindow):
@@ -56,7 +57,11 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.bookmarks_list)
         splitter.addWidget(self.metadata_panel)
         splitter.addWidget(self.canvas)
-        splitter.addWidget(right)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setWidget(right)
+        right_scroll.setMinimumWidth(240)
+        splitter.addWidget(right_scroll)
         splitter.setSizes([270, 660, 350])
         layout.addWidget(splitter, 1)
         self.timeline = Timeline()
@@ -89,6 +94,7 @@ class MainWindow(QMainWindow):
         self.controller.failed.connect(self._error)
         self.controller.photometric_changed.connect(self._photometric_changed)
         self._menus()
+        self.editor = AnnotationEditor(self, taxonomy_path or default_taxonomy_path())
         self.transport.setEnabled(False)
         self.statusBar().showMessage("Open a Cine to begin. Display pixels are separate from scientific raw values.")
 
@@ -126,6 +132,7 @@ class MainWindow(QMainWindow):
         self._action(view, "Last frame", lambda: self.navigate(self.controller.state.frame_count - 1), "End")
         self._action(view, "Review playback", self.toggle_play, "Space")
         annotation = self.menuBar().addMenu("Annotation")
+        self.annotation_menu = annotation
         self._action(annotation, "Bookmark current frame", self.add_bookmark, "B")
         self._action(annotation, "Bookmark with note/tags...", self.bookmark_dialog)
         self._action(annotation, "Session notes...", self.notes_dialog)
@@ -134,8 +141,9 @@ class MainWindow(QMainWindow):
         future.setEnabled(False)
         help_menu = self.menuBar().addMenu("Help")
         self._action(help_menu, "About", lambda: QMessageBox.information(
-            self, "Cine Viewer v1", "Read-only Cine review. Timing remains provisional when unresolved.\n"
-            "Labels are taxonomy-configured. Geometry editing and model inference are future work."))
+            self, "Annotation Editor v1", "Read-only Cine input with separate annotation documents.\n"
+            "Point, bbox and polygon editing; immutable history and undo/redo.\n"
+            "Timing remains provisional. Mask editing and model inference are future work."))
 
     def open_dialog(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Open Cine", "", "Phantom Cine (*.cine)")
@@ -144,6 +152,7 @@ class MainWindow(QMainWindow):
 
     def _reset(self):
         self.pause()
+        self.editor.reset()
         self.timeline.set_count(0)
         self.transport.setEnabled(False)
         self.canvas.clear_image()
@@ -158,6 +167,8 @@ class MainWindow(QMainWindow):
         self.annotation_panel.set_records([])
 
     def open_cine(self, path, session=None):
+        if not self.editor.confirm_discard():
+            return False
         self._reset()
         self.cine_path = Path(path)
         self._pending_session = session
@@ -166,6 +177,7 @@ class MainWindow(QMainWindow):
         self.display_panel.recalculate_button.setEnabled(False)
         self.statusBar().showMessage("Opening Cine; Initializing Photometric Ref90...")
         self.controller.open(path)
+        return True
 
     def _opened(self, metadata, timing):
         self.metadata = metadata
@@ -203,8 +215,9 @@ class MainWindow(QMainWindow):
         if self.metadata is None:
             return
         index = self.controller.state.clamp(index)
+        cancelled = self.editor.frame_will_change()
         self.timeline.set_frame(index)
-        self.statusBar().showMessage("Loading frame " + str(index))
+        self.statusBar().showMessage(("Unfinished drawing cancelled; " if cancelled else "") + "Loading frame " + str(index))
         self.controller.request_frame(index)
 
     def step(self, amount):
@@ -220,6 +233,7 @@ class MainWindow(QMainWindow):
         value = "unknown" if record.timestamp_s is None else f"{record.timestamp_s:.9f} s"
         self.time_label.setText(f"Frame: {index} / {self.metadata.frame_count - 1}    Relative timestamp: {value}    {record.timing_status.value}")
         self.session.last_frame = index
+        self.editor.frame_loaded()
         self.refresh_overlays()
         if index == self.metadata.frame_count - 1:
             self.pause()
@@ -256,6 +270,8 @@ class MainWindow(QMainWindow):
             self.canvas.overlays.render(self.layers, record.cine_id, record.frame_index)
             self.annotation_panel.set_records([a for layer in self.layers for a in layer.annotations
                                                if a.cine_id == record.cine_id and a.frame_index == record.frame_index])
+            if hasattr(self, "editor"):
+                self.editor.refresh_selection()
 
     def toggle_play(self):
         if self.playback.isActive():
@@ -281,10 +297,13 @@ class MainWindow(QMainWindow):
             self.step(1)  # do not race ahead when disk decoding is slower than review playback
 
     def close_cine(self):
+        if not self.editor.confirm_discard():
+            return False
         self._pending_session = None
         self._reset()
         self.cine_path = None
         self.controller.close()
+        return True
 
     def _error(self, message):
         self.pause()
@@ -379,6 +398,11 @@ class MainWindow(QMainWindow):
             self._error(str(error))
 
     def closeEvent(self, event):
+        if not self.editor.confirm_discard():
+            event.ignore()
+            return
+        self.editor.autosave_timer.stop()
+        self.editor.cancel()
         self.pause()
         self.controller.shutdown()
         event.accept()

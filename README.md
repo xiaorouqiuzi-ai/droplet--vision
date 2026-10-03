@@ -35,6 +35,17 @@ Cine → Frame Viewer → Frame Sampling → Manual Annotation → AI Prediction
 → Scientific Measurement → Event Analysis. Viewer v1 does not perform inference
 or physical event classification.
 
+### Annotation Editor v1
+
+Available in the current working tree for review: point, bbox and polygon
+drawing, selection, vertex/corner/point editing, deactivation, Undo/Redo and
+independent annotation JSON save/load with dirty-state protection and autosave.
+Labels remain open taxonomy strings. Immutable history and prediction provenance
+are preserved; annotation coordinates always use raw image pixels.
+Mask editing and YOLO integration are not implemented. See
+[Annotation Editor usage](docs/annotation_editor.md) and
+[document architecture](docs/annotation_architecture.md).
+
 ## Environment Setup
 
 The project is currently developed and validated with Python 3.12.
@@ -196,6 +207,10 @@ Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
 
+- Annotation Editor v1 (uncommitted, for review): added point/bbox/polygon tools,
+  selection and editing, QUndoStack commands, immutable annotation history,
+  atomic JSON documents, dirty protection, autosave and annotated-frame navigation.
+  ViewerSession, raw pixels, TIME64 and the frozen Ref90 preset remain separate.
 - Default Photometric Ref90 display: load the accepted JSON preset and estimate
   one gain from the Cine's 3% reference frame asynchronously; preserve that gain
   across navigation, with Raw override, reference QC and session provenance.

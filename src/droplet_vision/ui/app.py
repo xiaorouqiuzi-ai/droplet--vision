@@ -7,7 +7,7 @@ from .main_window import MainWindow
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Droplet Annotation Workstation — Cine Viewer v1")
+    parser = argparse.ArgumentParser(description="Droplet Annotation Workstation — Annotation Editor v1")
     parser.add_argument("--cine")
     parser.add_argument("--taxonomy", help="Alternative taxonomy JSON")
     args = parser.parse_args(argv)

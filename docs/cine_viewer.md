@@ -2,6 +2,10 @@
 
 Implemented on main.
 
+Annotation Editor v1 is additionally implemented in the current working tree
+for review, without a commit/push. See [editor usage](annotation_editor.md) and
+[AnnotationDocument architecture](annotation_architecture.md).
+
 Display Enhancement v1 is implemented on main, with default Photometric Ref90,
 Raw, Manual and Auto percentile display modes. These three data paths remain independent:
 
@@ -185,21 +189,25 @@ Schema accepts JSON geometry and validates type/finite serialization; full
 geometry topology and optical validity validation belong to future editors.
 The OverlayManager dispatches by geometry renderer registry, never label/model
 name. Canvas consumes AnnotationLayers; future mask renderers can be registered.
-AnnotationTool/ToolRegistry define activate, deactivate, mouse press/move/release,
-commit and cancel. Polygon, box, ellipse, point, polyline, mask-brush and keypoint
-tools can register factories. Future editing must use QUndoStack/command pattern;
-v1 has no editable geometry tools or undo commands.
+AnnotationTool/ToolRegistry now register Select, Point, BBox and Polygon tools.
+The editor adds separate handles to the base renderer for point dragging,
+bbox corner resize and polygon vertex movement. Actual QUndoStack commands
+create immutable derivatives and update active IDs. Ellipse, polyline, mask-brush
+and keypoint tools remain future extensions.
 
 ## Layers, provenance and human review
 
 Layer roles include prediction, manual, reviewed, ground_truth, measurement and
 auxiliary. UI has visible and locked toggles, current-frame items/count and
-selected taxonomy label. Locked is policy state for future editors; v1 overlays
-are all read-only, including unlocked layers.
+selected taxonomy label. Locked/hidden layers cannot be edited or deactivated.
+Drawing targets an unlocked Manual or Reviewed layer. Prediction and Ground Truth
+start locked; editing an explicitly unlocked prediction creates a Reviewed
+derivative and preserves the original record.
 
-Future workflow: AI prediction → Prediction Layer → human review →
+Future model-assisted workflow: AI prediction → Prediction Layer → human review →
 Accept / Edit / Reject → Reviewed Layer → Ground Truth.
 
+AnnotationDocument owns active IDs and the append-only AnnotationStore.
 AnnotationStore owns deep copies and disallows replacement of existing IDs.
 Review creates a new record with `derived_from`, reviewer, decision, timestamps
 and a new ID. Original model_id/confidence/geometry remain in the source record;
@@ -211,7 +219,8 @@ database objects; downstream persistence/editors must use the store contract.
 PredictionProvider defines `predict(cine_id, frame_index, image) -> AnnotationLayer`.
 Future YOLOAdapter/UNetAdapter must provide source/model provenance, preserve raw
 images and feed a prediction layer. No Torch/Ultralytics imports or packages are
-introduced. No prediction/editing commands are exposed as completed functionality.
+introduced. No model prediction commands are exposed as completed functionality.
+Manual point/bbox/polygon editing is provided by the current Annotation Editor update.
 
 ## Bookmarks, sessions and export
 
@@ -226,8 +235,8 @@ layer references. Explicit local_only data is excluded from portable saves.
 Loading asks the user to locate the Cine when necessary and checks filename,
 size and frame count. It does not depend on an absolute machine path. Identity
 checks do not establish byte-identical content; automatic full-file hashing is
-intentionally absent. Annotation layer content uses the separate annotation
-store and is not embedded in v1 viewer sessions. Non-JSON session destinations
+intentionally absent. Annotation content uses a separate AnnotationDocument
+JSON and is not embedded in viewer sessions. Non-JSON session destinations
 are rejected to prevent overwriting a Cine.
 
 Ctrl+O opens, Ctrl+E exports one displayed raw frame, Ctrl+S saves session,
@@ -235,8 +244,10 @@ Ctrl+L loads session, Ctrl+Q exits. File dialogs use Qt for consistent behavior
 across platforms. PNG default name is `<cine_stem>_frame_<index:06d>.png`, under
 ignored `outputs/viewer_frames/`. uint8 grayscale export is pixel-exact and is
 verified by reopening the PNG. There is no automatic bulk export or hashing.
-Unsaved sessions/bookmarks are currently in memory; save before changing Cine
-or closing the app (no autosave/unsaved-changes prompt in v1).
+Unsaved sessions/bookmarks are currently in memory; save ViewerSession before
+changing Cine or closing the app. Annotation documents have their own Save /
+Discard / Cancel protection, 30-second autosave and atomic saving. These controls
+do not imply autosave/dirty protection for ViewerSession bookmarks or notes.
 
 ## Validation and current limits
 
@@ -247,8 +258,8 @@ close/reopen. File size/mtime are checked unchanged. Logs and local UI smoke
 artifacts are in ignored `outputs/viewer_smoke/`.
 
 Validated scope is one supplied monochrome Cine and synthetic UI geometries;
-other cameras/packed/color formats require broader validation. Full annotation
-editing, mask overlays, sampling, dataset export, model inference and scientific
+other cameras/packed/color formats require broader validation. Mask editing,
+sampling, dataset export, model inference and scientific
 measurement/event analysis remain future work. Default taxonomy discovery
 currently assumes a source checkout; distributing configs in a wheel is future
 packaging work. UI shutdown waits for the current reader operation; there is no

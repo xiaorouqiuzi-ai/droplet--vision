@@ -4,6 +4,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from ..display import to_qimage
 from ..overlays.manager import OverlayManager
+from ...annotations.geometry import clamp_point
 
 
 class ImageCanvas(QGraphicsView):
@@ -16,6 +17,8 @@ class ImageCanvas(QGraphicsView):
         self.setBackgroundBrush(Qt.GlobalColor.darkGray)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self._pan_start = None
+        self.tool = None
+        self.setMouseTracking(True)
         self.setMinimumSize(320, 280)
         self.setObjectName("imageCanvas")
 
@@ -49,6 +52,10 @@ class ImageCanvas(QGraphicsView):
             self._pan_start = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton and self.tool is not None and not self.image_item.pixmap().isNull():
+            self.setFocus()
+            self.tool.mouse_press(self.image_position(event))
+            event.accept()
         else:
             super().mousePressEvent(event)
 
@@ -60,6 +67,9 @@ class ImageCanvas(QGraphicsView):
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             self._pan_start = position
             event.accept()
+        elif self.tool is not None and not self.image_item.pixmap().isNull():
+            self.tool.mouse_move(self.image_position(event))
+            event.accept()
         else:
             super().mouseMoveEvent(event)
 
@@ -68,5 +78,20 @@ class ImageCanvas(QGraphicsView):
             self._pan_start = None
             self.unsetCursor()
             event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton and self.tool is not None and not self.image_item.pixmap().isNull():
+            self.tool.mouse_release(self.image_position(event))
+            event.accept()
         else:
             super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.tool is not None and not self.image_item.pixmap().isNull():
+            self.tool.mouse_double_click(self.image_position(event))
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def image_position(self, event):
+        point = self.mapToScene(event.position().toPoint())
+        size = self.image_item.pixmap().size()
+        return clamp_point((point.x(), point.y()), size.width(), size.height())

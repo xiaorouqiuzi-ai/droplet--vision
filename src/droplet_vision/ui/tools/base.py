@@ -1,4 +1,4 @@
-"""Future tool registry. Editing will use QUndoStack commands, never in-place GT mutation."""
+"""Extensible tool registry; tools submit immutable-history undo commands."""
 from abc import ABC, abstractmethod
 
 
@@ -16,6 +16,12 @@ class AnnotationTool(ABC):
         pass
 
     def mouse_release(self, image_position):
+        pass
+
+    def mouse_double_click(self, image_position):
+        pass
+
+    def backspace(self):
         pass
 
     @abstractmethod

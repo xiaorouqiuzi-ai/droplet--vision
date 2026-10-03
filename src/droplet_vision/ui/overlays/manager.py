@@ -20,6 +20,7 @@ class OverlayManager:
     def __init__(self, scene):
         self.scene = scene
         self.items = []
+        self.by_id = {}
         self.renderers = {"point": _point, "bbox": _bbox, "polygon": _polygon}
 
     def register(self, geometry_type, renderer):
@@ -29,6 +30,7 @@ class OverlayManager:
         for item in self.items:
             self.scene.removeItem(item)
         self.items.clear()
+        self.by_id.clear()
 
     def render(self, layers, cine_id, frame_index):
         self.clear()
@@ -44,4 +46,13 @@ class OverlayManager:
                 item = renderer(self.scene, record.geometry, pen)
                 item.setZValue(10)
                 item.setToolTip(record.label_id + " / " + layer.name)
+                item.setData(0, record.annotation_id)
+                self.by_id[record.annotation_id] = item
                 self.items.append(item)
+
+    def highlight(self, annotation_id):
+        for key, item in self.by_id.items():
+            pen = QPen(QColor("#ffcc33" if key == annotation_id else "#00d9c0"),
+                       2 if key == annotation_id else 1)
+            pen.setCosmetic(True)
+            item.setPen(pen)
