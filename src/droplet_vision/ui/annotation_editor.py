@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPointF, Qt, QTimer
+from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainterPath, QPen, QUndoStack
 from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QLabel, QMessageBox, QToolBar
 
@@ -14,6 +14,8 @@ from .tools.drawing import SelectTool, PointTool, BBoxTool, PolygonTool
 
 
 class AnnotationEditor(QObject):
+    saved = Signal(object)
+
     def __init__(self, window, taxonomy_path):
         super().__init__(window)
         self.window, self.canvas = window, window.canvas
@@ -329,15 +331,25 @@ class AnnotationEditor(QObject):
             self.window.navigate(min(candidates) if direction > 0 else max(candidates))
 
     def default_path(self):
+        queue = getattr(self.window, "queue_manager", None)
+        if queue is not None:
+            path = queue.annotation_path()
+            if path is not None:
+                return path
         return Path("outputs/annotations") / (Path(self.document.cine_filename).stem + ".annotations.json")
 
     def save(self, path):
         if self.document is None:
             raise ValueError("No annotation document")
+        queue = getattr(self.window, "queue_manager", None)
+        if queue is not None and queue.root is not None:
+            from ..sampling.sampler import outside_source
+            outside_source(path, queue.root)
         self.document.save(path)
         self.path = Path(path)
         self.undo_stack.setClean()
         self.update_title()
+        self.saved.emit(Path(path))
 
     def save_dialog(self, checked=False, save_as=False):
         if self.document is None:
@@ -405,7 +417,13 @@ class AnnotationEditor(QObject):
         # Stable document UUID prevents two Cine files with the same stem overwriting recovery data.
         path = Path("outputs/annotations/autosave") / (
             Path(self.document.cine_filename).stem + "." + self.document.document_id + ".annotations.autosave.json")
+        queue = getattr(self.window, "queue_manager", None)
+        if queue is not None and queue.annotation_path() is not None:
+            path = queue.path.parent / "annotations/autosave" / path.name
         try:
+            if queue is not None and queue.root is not None:
+                from ..sampling.sampler import outside_source
+                outside_source(path, queue.root)
             self.document.save(path, mark_saved=False)
         except Exception as error:
             self.message("Annotation autosave failed: " + str(error))

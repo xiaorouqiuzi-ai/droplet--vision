@@ -1,7 +1,7 @@
 """Cine Viewer v1 shell for the future Droplet Annotation Workstation."""
 from __future__ import annotations
 from pathlib import Path
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QSplitter,
                                QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea)
@@ -19,9 +19,12 @@ from .panels.annotation_panel import AnnotationPanel
 from .panels.layer_panel import LayerPanel
 from .panels.display_panel import DisplayPanel
 from .annotation_editor import AnnotationEditor
+from .annotation_queue import QueueCoordinator
 
 
 class MainWindow(QMainWindow):
+    cine_open_requested = Signal(object)
+
     def __init__(self, taxonomy_path=None, parent=None, controller=None):
         super().__init__(parent)
         self.setWindowTitle("Droplet Annotation Workstation — Cine Viewer v1")
@@ -95,6 +98,7 @@ class MainWindow(QMainWindow):
         self.controller.photometric_changed.connect(self._photometric_changed)
         self._menus()
         self.editor = AnnotationEditor(self, taxonomy_path or default_taxonomy_path())
+        self.queue_manager = QueueCoordinator(self)
         self.transport.setEnabled(False)
         self.statusBar().showMessage("Open a Cine to begin. Display pixels are separate from scientific raw values.")
 
@@ -169,6 +173,7 @@ class MainWindow(QMainWindow):
     def open_cine(self, path, session=None):
         if not self.editor.confirm_discard():
             return False
+        self.cine_open_requested.emit(Path(path))
         self._reset()
         self.cine_path = Path(path)
         self._pending_session = session
@@ -399,6 +404,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         if not self.editor.confirm_discard():
+            event.ignore()
+            return
+        if not self.queue_manager.confirm_close():
             event.ignore()
             return
         self.editor.autosave_timer.stop()

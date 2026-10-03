@@ -1,0 +1,11 @@
+{
+  "preset_id": "frame_sampling_v1",
+  "anchor_fractions": [0.03, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.97],
+  "max_probe_frames": 512,
+  "max_change_peaks": 8,
+  "minimum_peak_separation_fraction": 0.005,
+  "minimum_peak_separation_frames": 3,
+  "change_metric": "mean_absolute_difference_raw_uint8",
+  "anchor_priority": 50,
+  "change_peak_priority": 100
+}

@@ -37,7 +37,7 @@ or physical event classification.
 
 ### Annotation Editor v1
 
-Available in the current working tree for review: point, bbox and polygon
+Implemented on main: point, bbox and polygon
 drawing, selection, vertex/corner/point editing, deactivation, Undo/Redo and
 independent annotation JSON save/load with dirty-state protection and autosave.
 Labels remain open taxonomy strings. Immutable history and prediction provenance
@@ -45,6 +45,17 @@ are preserved; annotation coordinates always use raw image pixels.
 Mask editing and YOLO integration are not implemented. See
 [Annotation Editor usage](docs/annotation_editor.md) and
 [document architecture](docs/annotation_architecture.md).
+
+### Frame Sampling and Annotation Queue
+
+Sampling v1 combines lifecycle anchors with raw-image change peaks. **Change
+peaks are sampling heuristics, not physical event classifications.** Build a
+portable JSON queue with `python scripts/build_annotation_queue.py --root
+"path/to/dataset" --output "outputs/annotation_queues/run/queue.json" --preview`
+(enter the command on one line). In the Viewer, use **Queue → Open Queue...**,
+set the local dataset root, then open items, annotate and explicitly mark progress.
+Frame Sampling + Annotation Queue v1 is implemented on main; see
+[sampling and queue workflow](docs/frame_sampling_queue.md).
 
 ## Environment Setup
 
@@ -207,6 +218,10 @@ Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
 
+- Frame Sampling + Annotation Queue v1: versioned raw
+  probing/local refinement, portable atomic queues, resumable manual statuses,
+  shared annotation documents and same-Cine frame navigation. No physical event
+  classification or model inference is performed.
 - Annotation Editor v1 (uncommitted, for review): added point/bbox/polygon tools,
   selection and editing, QUndoStack commands, immutable annotation history,
   atomic JSON documents, dirty protection, autosave and annotated-frame navigation.
