@@ -1,6 +1,15 @@
 # Cine Viewer UI v1 and annotation workstation foundation
 
-Implemented on main. Launch from a source
+Implemented on main.
+
+Display Enhancement v1 is implemented on main, with Raw, Manual and Auto
+percentile display modes. These three paths remain independent:
+
+- Display pipeline: raw frame → independent display transform → QImage.
+- Scientific pipeline: raw frame → scientific measurement.
+- Annotation geometry: raw image coordinates, independent of display settings.
+
+Launch from a source
 checkout with `python scripts/launch_viewer.py [--cine path/to/sample.cine]`.
 VisionLab Python 3.12 is the current environment; see README for exact tested
 versions. The UI only opens input through `droplet_vision.cine.CineReader`.
@@ -27,6 +36,61 @@ F fits the image. Overlay scene coordinates equal original image coordinates.
 2D uint8 and RGB uint8 display unchanged. uint16 grayscale display divides by
 256 into uint8; this is a fixed display-only mapping, not normalization of raw
 data. Scientific values and PNG export continue to use raw arrays.
+
+The unchanged display above is the **Raw** reference mode. The Display panel
+now also offers Manual and Auto contrast; these operate on independent copies
+between the raw cache and QImage. `droplet_vision.display` uses NumPy and has no
+Qt dependency. CineReader and FrameCache retain raw pixels. Changing settings
+rerenders only the current cached image, without requesting or decoding a frame.
+
+## Display enhancement
+
+**DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA**
+
+Display-enhanced pixels must not replace raw pixels for scientific grayscale
+statistics, cavity intensity analysis, physical interpretation or raw frame
+export. Bright/dark appearance alone does not establish phase identity.
+Adjusting settings uses the current raw cached frame without rereading Cine,
+modifying FrameCache, altering annotations or changing timestamps.
+
+- Raw: uint8 grayscale/RGB values are preserved exactly in an independent array.
+- Manual: normalize the display reference to `u = pixel / 255`, then compute
+  `v = clip((u - 0.5) * contrast + 0.5 + brightness, 0, 1)`, followed by
+  `round_to_even(255 * v**gamma)` as uint8. UI Brightness -100..100 maps to
+  -1..1; Contrast is 0.25..4; Gamma is 0.2..5. Gamma 1 is neutral. With this
+  display formula, a smaller gamma brightens midtones; it is not a physical
+  correction. Manual parameters are inactive in Raw/Auto modes.
+- Auto contrast: compute NumPy's linear percentiles over the display reference
+  (default 1 and 99), map low to 0 and high to 255, clip and round to uint8.
+  RGB uses a shared range over all channels, not independent channel balancing.
+  If high <= low, retain the Raw reference and show an insufficient-range
+  diagnostic, avoiding division by zero for constant images. A narrow but
+  positive range is safely stretched and clipped. Changing a percentile past its partner adjusts the partner by
+  0.1 percentage point so low stays below high.
+
+uint16 retains the existing fixed `//256` reference mapping before either
+enhancement. This is deliberately limited display support, not full-depth
+scientific processing. Inputs, dtype and shape remain unchanged; outputs are
+independent uint8 arrays with the same geometry. No resampling takes place.
+
+R switches to Raw; E restores the previous non-Raw mode (initially Manual).
+Reset Display restores Raw, brightness 0, contrast/gamma 1 and percentiles 1/99,
+without resetting frame position, zoom/pan, overlays, bookmarks or notes. The
+status bar always names the display mode and marks active enhancement. Display
+diagnostics are separate from the raw Metadata panel. Export Current Frame
+always exports raw pixels, regardless of the visible mode; its tooltip says
+"Exports raw frame pixels, not display-enhanced preview."
+
+ViewerSession saves `ui_state.display` using DisplaySettings serialization.
+Opening a new Cine starts in Raw; a matching loaded session restores its display
+state. Old sessions without this field use defaults. Invalid/unavailable settings
+produce a warning and fall back to Raw. No display settings enter annotation
+geometry or scientific metadata. Modes use extensible string IDs and a display
+backend registry; registering a backend before constructing the panel adds its
+mode to the selector. Additional backend-specific controls remain future work.
+No CLAHE, histogram widget or Display Preview export is implemented in this update.
+See [image preprocessing policy](image_preprocessing_policy.md) for the required
+separation from model preprocessing and scientific intensity analysis.
 
 ## Navigation and timing
 

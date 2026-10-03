@@ -4,9 +4,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QSplitter,
-                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog)
+                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget)
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
 from ..annotations.taxonomy import load_taxonomy, default_taxonomy_path
+from ..display import DisplaySettings, render_display
 from .cine_controller import CineController
 from .display import export_png
 from .widgets.image_canvas import ImageCanvas
@@ -15,6 +16,7 @@ from .widgets.transport_controls import TransportControls
 from .panels.metadata_panel import MetadataPanel
 from .panels.annotation_panel import AnnotationPanel
 from .panels.layer_panel import LayerPanel
+from .panels.display_panel import DisplayPanel
 
 
 class MainWindow(QMainWindow):
@@ -69,6 +71,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.transport)
         layout.addWidget(self.time_label)
         self.setCentralWidget(central)
+        self.display_panel = DisplayPanel()
+        self.display_dock = QDockWidget("Display", self)
+        self.display_dock.setObjectName("displayDock")
+        self.display_dock.setWidget(self.display_panel)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.display_dock)
+        self.display_label = QLabel("Display: RAW")
+        self.statusBar().addPermanentWidget(self.display_label)
+        self.display_panel.changed.connect(self.refresh_display)
         self.playback = QTimer(self)
         self.playback.setInterval(100)
         self.playback.timeout.connect(self._tick)
@@ -91,11 +101,17 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("File")
         self._action(file_menu, "Open Cine...", self.open_dialog, "Ctrl+O")
         self._action(file_menu, "Close Cine", self.close_cine)
-        self._action(file_menu, "Export Current Frame...", self.export_dialog, "Ctrl+E")
+        self.export_action = self._action(file_menu, "Export Current Frame...", self.export_dialog, "Ctrl+E")
+        self.export_action.setToolTip("Exports raw frame pixels, not display-enhanced preview.")
+        self.export_action.setStatusTip(self.export_action.toolTip())
         self._action(file_menu, "Save Session As...", self.save_session_dialog, "Ctrl+S")
         self._action(file_menu, "Load Session...", self.load_session_dialog, "Ctrl+L")
         self._action(file_menu, "Exit", self.close, "Ctrl+Q")
         view = self.menuBar().addMenu("View")
+        view.addAction(self.display_dock.toggleViewAction())
+        self._action(view, "Raw display", self.display_panel.show_raw, "R")
+        self._action(view, "Enhanced display (previous mode)", self.display_panel.show_enhanced, "E")
+        self._action(view, "Reset Display", self.display_panel.reset)
         self._action(view, "Fit image", self.canvas.fit_image, "F")
         self._action(view, "Zoom in", lambda: self.canvas.zoom(1.2), "+")
         self._action(view, "Zoom out", lambda: self.canvas.zoom(1 / 1.2), "-")
@@ -128,6 +144,7 @@ class MainWindow(QMainWindow):
         self.transport.setEnabled(False)
         self.canvas.clear_image()
         self.raw_image = self.current_record = self.metadata = self.session = None
+        self.display_panel.reset()
         self.time_label.setText("Relative timestamp: unknown")
         self.metadata_panel.setPlainText("No Cine open")
         self.bookmarks_list.clear()
@@ -158,6 +175,11 @@ class MainWindow(QMainWindow):
                 fps = pending.ui_state.get("review_playback_fps", 10)
                 if fps in (1, 2, 5, 10, 15, 20, 30):
                     self.transport.fps.setCurrentText(str(fps))
+                try:
+                    self.display_panel.set_settings(DisplaySettings.from_dict(pending.ui_state.get("display", {})))
+                except (TypeError, ValueError) as error:
+                    self.display_panel.reset()
+                    self._error("Invalid session display settings; using Raw: " + str(error))
                 self._update_bookmarks()
         self.navigate(self.session.last_frame)
 
@@ -176,16 +198,29 @@ class MainWindow(QMainWindow):
         if self.timeline.debounce.isActive():
             return  # A newer slider intent is waiting for debounce; do not cancel it.
         self.raw_image, self.current_record = image, record
-        self.canvas.set_image(image)
+        self.refresh_display()
         self.timeline.set_frame(index)
         self.metadata_panel.set_frame(record)
         value = "unknown" if record.timestamp_s is None else f"{record.timestamp_s:.9f} s"
         self.time_label.setText(f"Frame: {index} / {self.metadata.frame_count - 1}    Relative timestamp: {value}    {record.timing_status.value}")
         self.session.last_frame = index
         self.refresh_overlays()
-        self.statusBar().showMessage("Raw frame loaded; zoom/display do not alter scientific pixels.")
         if index == self.metadata.frame_count - 1:
             self.pause()
+
+    def refresh_display(self, settings=None):
+        settings = self.display_panel.settings
+        mode = settings.mode.upper()
+        if settings.mode == "auto_percentile":
+            mode = f"AUTO {settings.percentile_low:g}–{settings.percentile_high:g}%"
+        self.display_label.setText("Display: " + mode)
+        if self.raw_image is None:
+            return
+        result = render_display(self.raw_image, settings)
+        self.canvas.set_image(result.image)
+        message = ("Raw display reference; zoom/display do not alter scientific pixels."
+                   if settings.mode == "raw" else "Display enhancement active — raw scientific pixels unchanged.")
+        self.statusBar().showMessage(message + (" " + result.diagnostic if result.diagnostic else ""))
 
     def refresh_overlays(self):
         if self.current_record is not None:
@@ -279,7 +314,8 @@ class MainWindow(QMainWindow):
     def save_session(self, path):
         if self.session is None:
             raise ValueError("No Cine session")
-        self.session.ui_state = {"review_playback_fps": self.controller.state.playback_fps}
+        self.session.ui_state.update(review_playback_fps=self.controller.state.playback_fps,
+                                     display=self.display_panel.settings.to_dict())
         self.session.save(path)
 
     def save_session_dialog(self):

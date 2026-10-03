@@ -28,7 +28,7 @@ are supplied in this scaffold.
 | 3 | AI segmentation | Planned |
 | 4 | Scientific measurement and event analysis | Planned |
 
-Cine Viewer UI v1 is implemented on main.
+Cine Viewer UI v1 and display-only image enhancement are implemented on main.
 Its long-term target is the **Droplet Annotation Workstation**:
 Cine → Frame Viewer → Frame Sampling → Manual Annotation → AI Prediction Overlay
 → Human Review / Correction → Ground Truth → Dataset Export → YOLO / U-Net
@@ -125,6 +125,27 @@ The taxonomy is an open JSON label list, not a closed enum. Add a new `label_id`
 and restart the Viewer to show it, without editing UI Python. See
 [Viewer and annotation architecture](docs/cine_viewer.md).
 
+### Display enhancement
+
+Viewer supports display-only Raw, Brightness, Contrast, Gamma and Percentile
+auto-stretch in the Display panel. Display Enhancement v1 is implemented on main.
+
+**DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA**
+
+These controls do not modify the raw Cine frame. Annotation coordinates remain
+in raw image space. Scientific intensity analysis must use raw pixels.
+**Export Current Frame exports raw pixels**, not the display-enhanced preview.
+Enhanced pixels must not be used for scientific grayscale statistics, cavity
+intensity analysis or physical interpretation. Bright/dark appearance alone
+does not establish a bubble or liquid phase identity.
+
+Use **R** for Raw and **E** for the previous enhanced mode (Manual initially).
+Manual offers Brightness -100 to +100, Contrast 0.25 to 4.00 and Gamma 0.20 to
+5.00. Auto contrast defaults to the 1st–99th percentiles. Reset Display restores
+Raw and all display defaults without changing the frame, zoom or annotations.
+Sessions store display settings as UI state only. No additional dependencies
+are required. See [preprocessing policy](docs/image_preprocessing_policy.md).
+
 ## Organization
 
 `src/droplet_vision` holds reusable interfaces and future processing modules;
@@ -155,6 +176,12 @@ Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
 
+- Display Enhancement v1 is implemented on main: added Raw/Manual/Percentile
+  display modes with brightness, contrast and gamma controls, R/E comparison,
+  reset and session persistence. Transforms operate on independent display
+  arrays only; raw Cine pixels, frame cache, annotation coordinates, scientific
+  intensity analysis, TIME64 and raw PNG export remain unchanged. No dependencies
+  were added.
 - Initial scaffold: established object/state separation, optional measurement
   interfaces, annotation guidance and provisional timing/validation policies.
 - Cine Reader v1 is implemented on main: read-only random frame access,
