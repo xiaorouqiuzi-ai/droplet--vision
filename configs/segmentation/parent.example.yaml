@@ -1,0 +1,6 @@
+# Proposed adapter only; no trained model or weights.
+task: segmentation
+object_type: parent_droplet
+backend: classical_cv
+model_id: null
+applicable_states: []  # Unspecified; not validated for all states.
