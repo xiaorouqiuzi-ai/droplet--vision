@@ -1,6 +1,6 @@
 # Cine Viewer UI v1 and annotation workstation foundation
 
-Implemented on `feature/cine-viewer-ui`, awaiting review. Launch from a source
+Implemented on main. Launch from a source
 checkout with `python scripts/launch_viewer.py [--cine path/to/sample.cine]`.
 VisionLab Python 3.12 is the current environment; see README for exact tested
 versions. The UI only opens input through `droplet_vision.cine.CineReader`.

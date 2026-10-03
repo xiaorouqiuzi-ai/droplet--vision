@@ -28,8 +28,8 @@ are supplied in this scaffold.
 | 3 | AI segmentation | Planned |
 | 4 | Scientific measurement and event analysis | Planned |
 
-Cine Viewer UI v1 is implemented on `feature/cine-viewer-ui` for review, not
-merged into main. Its long-term target is the **Droplet Annotation Workstation**:
+Cine Viewer UI v1 is implemented on main.
+Its long-term target is the **Droplet Annotation Workstation**:
 Cine → Frame Viewer → Frame Sampling → Manual Annotation → AI Prediction Overlay
 → Human Review / Correction → Ground Truth → Dataset Export → YOLO / U-Net
 → Scientific Measurement → Event Analysis. Viewer v1 does not perform inference
@@ -163,7 +163,7 @@ Git; see [data policy](docs/data_policy.md).
   CLI entry points and opt-in real-Cine integration tests. No image exports.
   Local smoke testing reproduced 8146 vs approximately 4073.32 fps; the timing
   mismatch remains unresolved. See [Cine Reader usage and limitations](docs/cine_reader.md).
-- Viewer UI v1 (feature branch, awaiting review): Graphics View canvas,
+- Viewer UI v1 is implemented on main: Graphics View canvas,
   asynchronous frame navigation, 64-frame LRU, review playback, metadata/TIME64,
   bookmarks, portable sessions and pixel-exact PNG export. Added Qt-free open
   taxonomy/annotation records, append-only prediction review, read-only
