@@ -10,5 +10,8 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
 
+[project.optional-dependencies]
+cine = ["pims==0.7"]
+
 [tool.setuptools.packages.find]
 where = ["src"]

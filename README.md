@@ -23,7 +23,7 @@ are supplied in this scaffold.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Cine infrastructure | Active |
+| 1 | Cine reader / metadata / TIME64 / inventory | Active; implemented on feature/cine-reader |
 | 2 | Classical CV baseline | Planned |
 | 3 | AI segmentation | Planned |
 | 4 | Scientific measurement and event analysis | Planned |
@@ -48,7 +48,9 @@ measurement records rather than importing GPU frameworks into Cine modules.
 The reported Chuzi-PY baseline is Python 3.9.13, NumPy 2.0.2, Pillow 11.3.0,
 PIMS 0.7, imageio 2.37.2, Slicerator 1.1.0, and tifffile 2024.8.30.
 These are environment observations, not required package dependencies.
-This scaffold requires only Python >=3.9; no installation is needed for checks.
+Core interfaces require only Python >=3.9. Cine support declares the optional
+`cine` extra (`pims==0.7`); use the existing Chuzi-PY environment. Core imports
+and pure unit tests do not require PIMS. No dependency installation is performed.
 From the repository root, using the existing Chuzi-PY interpreter:
 
 ```console
@@ -59,3 +61,19 @@ python -m compileall src
 Local paths belong in ignored local configuration, never machine-specific
 versioned settings. Raw Cine files, exported datasets, and weights stay outside
 Git; see [data policy](docs/data_policy.md).
+
+## Update summary
+
+- Initial scaffold: established object/state separation, optional measurement
+  interfaces, annotation guidance and provisional timing/validation policies.
+- Cine Reader (implemented on `feature/cine-reader`, pending review; not merged
+  into main): read-only random frame access, whitelisted metadata, bounded raw
+  TIME64 extraction, conservative timing summaries, portable CSV/JSON inventory,
+  CLI entry points and opt-in real-Cine integration tests. No image exports.
+  Local smoke testing reproduced 8146 vs approximately 4073.32 fps; the timing
+  mismatch remains unresolved. See [Cine Reader usage and limitations](docs/cine_reader.md).
+
+```console
+python scripts/inspect_cine.py --input data/raw/example.cine --json outputs/inspect.json
+python scripts/build_cine_inventory.py --root data/raw --csv outputs/inventory.csv --json outputs/inventory.json
+```
