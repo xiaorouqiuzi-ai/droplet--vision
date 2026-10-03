@@ -146,6 +146,9 @@ Raw and all display defaults without changing the frame, zoom or annotations.
 Sessions store display settings as UI state only. No additional dependencies
 are required. See [preprocessing policy](docs/image_preprocessing_policy.md).
 
+A human-reviewed photometric preprocessing candidate preset is available at
+`configs/photometry/photometric_ref90_v1.json`; see `docs/photometric_presets.md`.
+
 ## Organization
 
 `src/droplet_vision` holds reusable interfaces and future processing modules;

@@ -1,0 +1,62 @@
+{
+  "preset_id": "photometric_ref90_v1",
+  "version": 1,
+  "purpose": "annotation_and_model_preprocessing_candidate",
+  "reference_metric": "p90",
+  "reference_image": "DBD__202012__2.0ulBD46450c8__frame_000966.png",
+  "reference_sha256": "6ea61370e56ba1a7b655e7c04c8907208a661a3046dad8a03968ae64767104a6",
+  "reference_p90": 232.0,
+  "target_fraction": 0.90,
+  "target_p90": 208.8,
+  "normalization": {
+    "type": "gain_only",
+    "formula": "I_norm = clip(round(I_raw * gain_used), 0, 255)",
+    "input": "raw uint8 grayscale pixels",
+    "image_statistic": "numpy.percentile(I_raw, 90, method='linear')",
+    "gain_formula": "gain_raw = target_p90 / P90_raw; gain_used = clip(gain_raw, gain_min, gain_max)",
+    "gain_min": 0.10,
+    "gain_max": 10.0,
+    "rounding": "nearest integer, ties to even (numpy.rint), after float64 multiplication",
+    "invalid_statistic_policy": "If P90_raw <= 0, preserve a raw copy and record INVALID_REFERENCE_STATISTIC"
+  },
+  "output": {
+    "dtype": "uint8",
+    "grayscale": true,
+    "preserve_geometry": true
+  },
+  "qc": {
+    "saturation_warning_fraction": 0.01,
+    "severe_saturation_warning_fraction": 0.05,
+    "high_gain_warning": 3.0,
+    "very_high_gain_warning": 6.0,
+    "warning_comparison": "strictly greater than each threshold; nested warnings are cumulative",
+    "target_reached_rule": "P90_normalized / reference_p90 >= target_fraction"
+  },
+  "scientific_policy": {
+    "raw_cine_unchanged": true,
+    "raw_pixels_remain_scientific_source": true,
+    "normalized_pixels_not_for_scientific_intensity_analysis": true
+  },
+  "status": "human_accepted_preview",
+  "provenance": {
+    "selection": "Reference image explicitly selected by the user; reference-90% preview accepted after human visual review",
+    "preview_dataset": "211 previously extracted early frames, selected using a uniform 3% frame-position rule",
+    "validation_scope": "Observed results for this preview dataset only; not a permanent algorithm performance guarantee",
+    "gain_bounds": "Accepted preview bounds are fixed in this preset; do not recompute them for a new dataset",
+    "reference_storage": "External image data; filename and SHA-256 identify the reference without bundling it in Git"
+  },
+  "preview_validation": {
+    "image_count": 211,
+    "target_reached_count": 211,
+    "target_not_reached_count": 0,
+    "normalized_p90_observed": 209,
+    "normalized_to_reference_ratio": 0.900862,
+    "gain_median": 4.64,
+    "gain_max_observed": 8.352,
+    "gain_over_3_count": 143,
+    "gain_over_6_count": 28,
+    "gain_clipped_count": 0,
+    "saturation_warning_count": 1,
+    "severe_saturation_warning_count": 0
+  }
+}
