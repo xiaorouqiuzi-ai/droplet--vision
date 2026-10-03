@@ -1,0 +1,4 @@
+# Relative examples only; copy to paths.local.yaml for machine-specific paths.
+input_root: data/raw
+frame_export_root: data/frames
+output_root: outputs

@@ -1,0 +1,6 @@
+# Proposed adapter only; no trained model or weights.
+task: instance_segmentation
+object_type: daughter_droplet
+backend: yolo_seg
+model_id: null
+applicable_states: []  # Unspecified; not validated for all states.
