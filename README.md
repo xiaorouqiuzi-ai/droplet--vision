@@ -23,7 +23,7 @@ are supplied in this scaffold.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Cine reader / metadata / TIME64 / inventory | Active; implemented on feature/cine-reader |
+| 1 | Cine reader / metadata / TIME64 / inventory | Implemented (v1) |
 | 2 | Classical CV baseline | Planned |
 | 3 | AI segmentation | Planned |
 | 4 | Scientific measurement and event analysis | Planned |
@@ -66,8 +66,8 @@ Git; see [data policy](docs/data_policy.md).
 
 - Initial scaffold: established object/state separation, optional measurement
   interfaces, annotation guidance and provisional timing/validation policies.
-- Cine Reader (implemented on `feature/cine-reader`, pending review; not merged
-  into main): read-only random frame access, whitelisted metadata, bounded raw
+- Cine Reader v1 is implemented on main: read-only random frame access,
+  whitelisted metadata, bounded raw
   TIME64 extraction, conservative timing summaries, portable CSV/JSON inventory,
   CLI entry points and opt-in real-Cine integration tests. No image exports.
   Local smoke testing reproduced 8146 vs approximately 4073.32 fps; the timing

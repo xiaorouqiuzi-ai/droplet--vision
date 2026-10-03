@@ -1,6 +1,6 @@
 # Cine Reader
 
-Implemented on `feature/cine-reader`, pending review; not yet merged to main.
+Cine Reader v1 provides the repository's read-only Phantom Cine input layer.
 This feature covers raw input only: PIMS reading, random frame access, core
 metadata, raw TIME64 and batch inventory. It performs no segmentation, event
 analysis, measurements, plotting, image export or video conversion.
