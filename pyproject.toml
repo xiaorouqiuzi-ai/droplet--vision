@@ -12,6 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 cine = ["pims==0.7"]
+ui = ["PySide6==6.10.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

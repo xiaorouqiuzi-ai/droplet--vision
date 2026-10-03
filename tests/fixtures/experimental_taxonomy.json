@@ -1,0 +1,1 @@
+{"schema_version": 1, "labels": [{"label_id": "experimental_feature_x", "display_name": "Experimental feature X", "allowed_geometry_types": ["point", "bbox", "polygon"], "enabled": true, "attributes": {}}]}

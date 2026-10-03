@@ -16,6 +16,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+VisionLab/
 *.egg-info/
 build/
 dist/

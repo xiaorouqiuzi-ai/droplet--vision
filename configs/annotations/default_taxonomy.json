@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "labels": [
+    {"label_id": "parent_droplet", "display_name": "Parent droplet", "group": "Droplet", "allowed_geometry_types": ["polygon", "bbox", "ellipse", "mask"], "enabled": true, "attributes": {}},
+    {"label_id": "internal_cavity_candidate", "display_name": "Internal cavity candidate", "group": "Internal feature", "allowed_geometry_types": ["point", "polygon", "bbox", "ellipse", "mask"], "enabled": true, "attributes": {}},
+    {"label_id": "daughter_droplet", "display_name": "Daughter droplet", "group": "Droplet", "allowed_geometry_types": ["point", "polygon", "bbox", "ellipse", "mask"], "enabled": true, "attributes": {}},
+    {"label_id": "flame", "display_name": "Flame", "group": "Optical feature", "enabled": true, "attributes": {}},
+    {"label_id": "soot", "display_name": "Soot", "group": "Optical feature", "enabled": true, "attributes": {}},
+    {"label_id": "support_structure", "display_name": "Support structure", "group": "Interference", "enabled": true, "attributes": {}}
+  ]
+}

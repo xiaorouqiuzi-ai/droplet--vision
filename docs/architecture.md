@@ -41,7 +41,13 @@ preprocessing provenance in metadata. Daughter/cavity instances must remain
 distinguishable. The schema intentionally accepts backend-neutral mask types.
 Raw TIME64 integers must survive every serialization boundary.
 
-Chuzi-PY owns Cine/data processing; Torch-GPU owns future GPU inference and
-training. Keep optional backend imports inside their adapters. Core schema,
+VisionLab now owns Cine/data processing and the optional Viewer UI; future GPU
+inference/training remains separate. Keep optional backend imports inside their adapters. Core schema,
 enums and tests depend only on the standard library. Configuration and model
 metadata bridge the environments without merging them.
+
+The Qt-free `annotations` package owns an open taxonomy, image-coordinate
+records, append-only review provenance and portable sessions. `ui` consumes
+CineReader and those records; `inference.PredictionProvider` is a backend-neutral
+future extension point. See [cine_viewer.md](cine_viewer.md) for the workstation
+workflow and v1 limits.

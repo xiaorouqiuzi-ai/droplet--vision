@@ -1,6 +1,6 @@
 # Timing policy
 
-For the reported test Cine `32BD8E12-500c.cine`:
+For the reported local test Cine (filename omitted for portability):
 
 | Source | Reported observation |
 | --- | --- |
