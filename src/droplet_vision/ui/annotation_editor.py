@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainterPath, QPen, QUndoStack
-from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QLabel, QMessageBox, QToolBar, QDockWidget
+from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QLabel, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QGroupBox, QToolButton
 
 from ..annotations import AnnotationDocument, AnnotationRecord
 from ..annotations.geometry import nearest_polygon_segment
@@ -15,6 +15,7 @@ from .tools.base import ToolRegistry
 from .tools.drawing import SelectTool, PointTool, BBoxTool, PolygonTool
 from .tools.magic_wand import MagicWandTool
 from .panels.magic_wand_panel import MagicWandPanel
+from .panels.tool_settings_panel import ToolSettingsPanel
 from ..annotations.magic_wand import supported_image
 
 
@@ -36,38 +37,49 @@ class AnnotationEditor(QObject):
         self.undo_stack = QUndoStack(self)
         self.registry = ToolRegistry()
         self.wand_panel = MagicWandPanel()
-        self.wand_dock = QDockWidget(tr('Magic Wand'), window)
-        self.wand_dock.setObjectName('magicWandDock')
-        self.wand_dock.setWidget(self.wand_panel)
-        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.wand_dock)
-        self.wand_dock.hide()
         self.wand_panel.changed.connect(lambda: self.tool.recalculate() if isinstance(self.tool, MagicWandTool) else None)
         self.wand_panel.confirm_requested.connect(lambda: self.tool.commit() if isinstance(self.tool, MagicWandTool) else None)
         self.wand_panel.cancel_requested.connect(self.cancel)
         self.actions = {}
-        self.toolbar = QToolBar(tr("Annotation tools"), window)
-        self.toolbar.setObjectName("annotationTools")
-        window.addToolBar(self.toolbar)
+        self.last_tools = {}
+        self.tool_key = 'select'
+        self.tool_group = QGroupBox(tr('Annotation tools'))
+        self.tool_buttons = {}
+        tool_layout = QGridLayout(self.tool_group)
+        window.annotation_panel.tool_host.layout().addWidget(self.tool_group)
         self.action_group = QActionGroup(self)
         self.action_group.setExclusive(True)
         for key, title, shortcut, cls in (("select", tr("Select"), "1", SelectTool),
                                           ("point", tr("Point"), "2", PointTool),
                                           ("bbox", tr("BBox"), "3", BBoxTool),
                                           ("polygon", tr("Polygon"), "4", PolygonTool),
-                                          ("magic_wand", tr("Magic Wand"), "5", MagicWandTool)):
+                                          ("magic_wand", tr("Wand"), "5", MagicWandTool)):
             self.registry.register(key, lambda tool_class=cls: tool_class(self))
             action = QAction(title, self)
             action.setCheckable(True)
             action.setShortcut(QKeySequence(shortcut))
             action.setData(cls.geometry_type)
             action.triggered.connect(lambda checked=False, tool_id=key: self.switch_tool(tool_id))
-            self.toolbar.addAction(action)
+            window.addAction(action)
+            button = QToolButton()
+            button.setDefaultAction(action)
+            button.setText(tr('Wand') if key == 'magic_wand' else title)
+            button.setToolTip(title)
+            button.setMinimumHeight(30)
+            button.setStyleSheet('QToolButton:checked { border: 2px solid #3a8dde; background: #244b70; color: white; font-weight: bold; }')
+            order = ('select', 'polygon', 'magic_wand', 'bbox', 'point').index(key)
+            tool_layout.addWidget(button, order // 3, order % 3)
+            self.tool_buttons[key] = button
             self.action_group.addAction(action)
             self.actions[key] = action
         self.frame_count_label = QLabel(tr("Annotated: 0 | Annotated frames: 0"))
-        self.toolbar.addWidget(self.frame_count_label)
+        window.annotation_panel.tool_host.layout().addWidget(self.frame_count_label)
+        settings_group = QGroupBox(tr('Tool settings'))
+        self.tool_settings = ToolSettingsPanel(self)
+        QVBoxLayout(settings_group).addWidget(self.tool_settings)
+        window.annotation_panel.tool_host.layout().addWidget(settings_group)
         menu = window.annotation_menu
-        menu.addAction(self.wand_dock.toggleViewAction())
+
         menu.addSeparator()
         window._action(menu, tr("New Annotation Document"), self.new_document)
         open_annotations = window._action(menu, tr("Open Annotations..."), self.open_dialog, "Ctrl+Shift+O")
@@ -90,8 +102,8 @@ class AnnotationEditor(QObject):
         window._action(menu, tr("Next Annotated Frame"), lambda: self.annotated_frame(1), "Alt+Right")
         self.tool = None
         self.switch_tool("select")
-        window.annotation_panel.label_changed.connect(self.update_tools)
-        window.annotation_panel.annotation_selected.connect(self.select)
+        window.annotation_panel.label_changed.connect(self.label_changed)
+        window.annotation_panel.annotation_selected.connect(self.select_from_list)
         window.layer_panel.changed.connect(self.layer_changed)
         self.autosave_timer = QTimer(self)
         self.autosave_timer.setInterval(30000)
@@ -121,6 +133,19 @@ class AnnotationEditor(QObject):
         if self.tool is not None and self.tool.geometry_type and not self.can_draw(self.tool.geometry_type):
             self.switch_tool("select")
 
+    def label_changed(self):
+        self.cancel()
+        self.update_tools()
+        label = self.window.annotation_panel.selected_label()
+        if label is None:
+            return
+        candidates = [self.last_tools.get(label.label_id), 'polygon', 'magic_wand', 'bbox', 'point']
+        key = next((key for key in candidates if key in self.actions and self.actions[key].isEnabled()), None)
+        if key is not None:
+            self.switch_tool(key)
+        else:
+            self.message(tr('No compatible drawing tool is available for this label and layer.'))
+
     def layer_changed(self):
         self.cancel()
         self.update_tools()
@@ -130,11 +155,19 @@ class AnnotationEditor(QObject):
         if self.tool is not None:
             self.tool.deactivate()
         self.window.pause()
+        self.tool_key = key
         self.tool = self.registry.create(key)
         self.tool.activate(self.canvas)
         self.canvas.tool = self.tool
         self.actions[key].setChecked(True)
+        self.tool_settings.show_tool(key)
+        label = self.window.annotation_panel.selected_label()
+        if label is not None and self.tool.geometry_type is not None and self.can_draw(self.tool.geometry_type):
+            self.last_tools[label.label_id] = key
         self.refresh_selection()
+        if label is not None:
+            self.message(tr('Current label: {label} · Tool: {tool}. {hint}').format(
+                label=tr(label.display_name), tool=self.actions[key].text(), hint=tr(self.tool_settings.HINTS[key])))
 
     def reset(self):
         self.cancel()
@@ -158,10 +191,13 @@ class AnnotationEditor(QObject):
 
     def frame_loaded(self):
         self.ready = True
-        if self.document is None:
+        new_document = self.document is None
+        if new_document:
             self._create_document()
         self.update_tools()
         self.update_counts()
+        if new_document and self.window.annotation_panel.selected_label() is not None:
+            self.label_changed()
 
     def _create_document(self):
         metadata, record = self.window.metadata, self.window.current_record
@@ -293,6 +329,11 @@ class AnnotationEditor(QObject):
             self.selected_id = None
         self.refresh_selection()
 
+    def select_from_list(self, annotation_id):
+        if annotation_id is not None and self.tool_key != 'select':
+            self.switch_tool('select')
+        self.select(annotation_id)
+
     def refresh_selection(self):
         self.clear_handles()
         record = self.selected_record()
@@ -300,6 +341,7 @@ class AnnotationEditor(QObject):
             self.selected_vertex = None
         self.canvas.overlays.highlight(self.selected_id)
         self.window.annotation_panel.select_record(record)
+        self.tool_settings.refresh()
         if record is None or not self.can_edit(record) or self.tool is None or self.tool.geometry_type is not None:
             return
         for index, point in enumerate(self.geometry_handles(record.geometry_type, record.geometry)):
@@ -370,6 +412,8 @@ class AnnotationEditor(QObject):
         for item in self.preview:
             self.canvas.scene().removeItem(item)
         self.preview.clear()
+        if getattr(self, 'tool', None) is not None:
+            self.tool_settings.refresh()
 
     def preview_geometry(self, kind, geometry):
         self.clear_preview()
@@ -380,6 +424,7 @@ class AnnotationEditor(QObject):
         self.preview.append(item)
 
     def preview_polygon(self, points):
+        self.tool_settings.refresh()
         self.clear_preview()
         if not points:
             return

@@ -20,7 +20,7 @@ class MagicWandTool(EditorTool):
 
     def activate(self, canvas):
         super().activate(canvas)
-        self.editor.wand_dock.show()
+        self.editor.tool_settings.show_tool("magic_wand")
         self.editor.message(tr('Click a target region to select similar grayscale pixels.'))
 
     def mouse_press(self, position):

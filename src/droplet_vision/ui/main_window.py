@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QSplitter,
-                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea)
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
+                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea, QGroupBox)
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
 from ..annotations.taxonomy import load_taxonomy, default_taxonomy_path
 from ..display import DisplaySettings, render_display
@@ -13,7 +13,7 @@ from .cine_controller import CineController
 from .display import export_png
 from .widgets.image_canvas import ImageCanvas
 from .widgets.timeline import Timeline
-from .widgets.transport_controls import TransportControls
+from .widgets.transport_controls import TransportControls, REVIEW_PLAYBACK_FPS
 from .panels.metadata_panel import MetadataPanel
 from .panels.annotation_panel import AnnotationPanel
 from .panels.layer_panel import LayerPanel
@@ -45,30 +45,36 @@ class MainWindow(QMainWindow):
         labels = load_taxonomy(taxonomy_path or default_taxonomy_path())
         central = QWidget()
         layout = QVBoxLayout(central)
-        splitter = QSplitter()
         self.metadata_panel = MetadataPanel()
         self.canvas = ImageCanvas()
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
+        layout.addWidget(self.canvas, 1)
+        self.display_panel = DisplayPanel()
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.addWidget(self.metadata_panel)
+        display_group = QGroupBox(tr('Display'))
+        QVBoxLayout(display_group).addWidget(self.display_panel)
+        left_layout.addWidget(display_group)
+        left_layout.addStretch()
+        self.info_dock = self._scroll_dock(tr('Image and display'), 'imageInfoDock', left,
+                                           Qt.DockWidgetArea.LeftDockWidgetArea)
         self.annotation_panel = AnnotationPanel(labels)
         self.layer_panel = LayerPanel(self.layers)
         self.layer_panel.changed.connect(self.refresh_overlays)
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
         right_layout.addWidget(self.annotation_panel)
         right_layout.addWidget(self.layer_panel)
-        right_layout.addWidget(QLabel(tr("Bookmarks (double-click to navigate)")))
+        right_layout.addStretch()
+        self.annotation_dock = self._scroll_dock(tr('Annotation workspace'), 'annotationWorkspaceDock', right,
+                                                 Qt.DockWidgetArea.RightDockWidgetArea)
         self.bookmarks_list = QListWidget()
-        self.bookmarks_list.setMaximumHeight(110)
         self.bookmarks_list.itemDoubleClicked.connect(lambda item: self.navigate(item.data(Qt.ItemDataRole.UserRole)))
-        right_layout.addWidget(self.bookmarks_list)
-        splitter.addWidget(self.metadata_panel)
-        splitter.addWidget(self.canvas)
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setWidget(right)
-        right_scroll.setMinimumWidth(240)
-        splitter.addWidget(right_scroll)
-        splitter.setSizes([270, 660, 350])
-        layout.addWidget(splitter, 1)
+        self.bookmarks_dock = QDockWidget(tr('Bookmarks (double-click to navigate)'), self)
+        self.bookmarks_dock.setObjectName('bookmarksDock')
+        self.bookmarks_dock.setWidget(self.bookmarks_list)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.bookmarks_dock)
+        self.bookmarks_dock.hide()
         self.timeline = Timeline()
         self.timeline.requested.connect(self.navigate)
         self.transport = TransportControls()
@@ -82,11 +88,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.transport)
         layout.addWidget(self.time_label)
         self.setCentralWidget(central)
-        self.display_panel = DisplayPanel()
-        self.display_dock = QDockWidget(tr("Display"), self)
-        self.display_dock.setObjectName("displayDock")
-        self.display_dock.setWidget(self.display_panel)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.display_dock)
         self.display_label = QLabel(tr("Display: RAW"))
         self.statusBar().addPermanentWidget(self.display_label)
         self.display_panel.changed.connect(self.refresh_display)
@@ -103,6 +104,18 @@ class MainWindow(QMainWindow):
         self.queue_manager = QueueCoordinator(self)
         self.transport.setEnabled(False)
         self.statusBar().showMessage(tr("Open a Cine to begin. Display pixels are separate from scientific raw values."))
+
+    def _scroll_dock(self, title, name, content, area):
+        dock = QDockWidget(title, self)
+        dock.setObjectName(name)
+        dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumWidth(290)
+        scroll.setWidget(content)
+        dock.setWidget(scroll)
+        self.addDockWidget(area, dock)
+        return dock
 
     def _action(self, menu, text, callback, shortcut=None):
         action = QAction(tr(text), self)
@@ -130,7 +143,8 @@ class MainWindow(QMainWindow):
         self._action(file_menu, tr("Load Session..."), self.load_session_dialog, "Ctrl+L")
         self._action(file_menu, tr("Exit"), self.close, "Ctrl+Q")
         view = self.menuBar().addMenu(tr("View"))
-        view.addAction(self.display_dock.toggleViewAction())
+        for dock in (self.info_dock, self.annotation_dock, self.bookmarks_dock):
+            view.addAction(dock.toggleViewAction())
         self._action(view, tr("Raw display"), self.display_panel.show_raw, "R")
         self._action(view, tr("Photometric Ref90 v1"), self.display_panel.show_photometric, "P")
         self._action(view, tr("Enhanced display (previous mode)"), self.display_panel.show_enhanced, "E")
@@ -139,7 +153,8 @@ class MainWindow(QMainWindow):
         self._action(view, tr("Zoom in"), lambda: self.canvas.zoom(1.2), "+")
         self._action(view, tr("Zoom out"), lambda: self.canvas.zoom(1 / 1.2), "-")
         for shortcut, delta in [("Left", -1), ("Right", 1), ("Shift+Left", -10),
-                                ("Shift+Right", 10), ("PgUp", -100), ("PgDown", 100)]:
+                                ("Shift+Right", 10), ("PgUp", -100), ("PgDown", 100),
+                                ("Ctrl+PgUp", -1000), ("Ctrl+PgDown", 1000)]:
             self._action(view, shortcut, lambda checked=False, d=delta: self.step(d), shortcut)
         self._action(view, tr("First frame"), lambda: self.navigate(0), "Home")
         self._action(view, tr("Last frame"), lambda: self.navigate(self.controller.state.frame_count - 1), "End")
@@ -180,7 +195,7 @@ class MainWindow(QMainWindow):
         self.display_panel.reset()
         self.display_panel.set_photometric()
         self.time_label.setText(tr("Relative timestamp: unknown"))
-        self.metadata_panel.setPlainText(tr("No Cine open"))
+        self.metadata_panel.clear()
         self.bookmarks_list.clear()
         for layer in self.layers:
             layer.annotations.clear()
@@ -214,7 +229,7 @@ class MainWindow(QMainWindow):
             else:
                 self.session = pending
                 fps = pending.ui_state.get("review_playback_fps", 10)
-                if fps in (1, 2, 5, 10, 15, 20, 30):
+                if fps in REVIEW_PLAYBACK_FPS:
                     self.transport.fps.setCurrentText(str(fps))
                 try:
                     self.display_panel.set_settings(DisplaySettings.from_dict(
@@ -267,9 +282,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 tr("PHOTOMETRIC_REFERENCE_FAILED: Photometric Ref90 unavailable; Raw display used."))
             return
-        mode = settings.mode.upper()
+        mode = self.display_panel.mode.currentText()
         if settings.mode == "auto_percentile":
-            mode = f"AUTO {settings.percentile_low:g}–{settings.percentile_high:g}%"
+            mode += f" {settings.percentile_low:g}–{settings.percentile_high:g}%"
         self.display_label.setText(tr("Display: ") + mode)
         if self.raw_image is None:
             return
@@ -306,7 +321,7 @@ class MainWindow(QMainWindow):
         self.transport.play.setText(tr("Play"))
 
     def set_playback_fps(self, fps):
-        if fps not in (1, 2, 5, 10, 15, 20, 30):
+        if fps not in REVIEW_PLAYBACK_FPS:
             raise ValueError("Unsupported review playback speed")
         self.controller.state.playback_fps = fps
         self.playback.setInterval(round(1000 / fps))

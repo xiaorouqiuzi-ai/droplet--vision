@@ -1,5 +1,7 @@
 # Annotation architecture
 
+正式标注类别、Frame State 和质量标记定义见 [Droplet Vision 标注内容方案 v1.0](annotation_labeling_scheme_v1.md)，该文件为标注内容规范的唯一依据。
+
 The Qt-free `annotations` package separates scientific observation records from
 Viewer UI state. See [Annotation Editor v1](annotation_editor.md) for operations.
 

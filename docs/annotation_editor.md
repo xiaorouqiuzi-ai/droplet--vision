@@ -1,7 +1,8 @@
 # Annotation Editor v1 / Annotation UX v1.1
 
-Editor v1 is on main. UX v1.1 additions are in the working tree for review;
-not yet committed or pushed.
+正式标注类别、Frame State 和质量标记定义见 [Droplet Vision 标注内容方案 v1.0](annotation_labeling_scheme_v1.md)，该文件为标注内容规范的唯一依据。
+
+Editor v1 and UX v1.1 are on main. Layout v1.2 is in the working tree for review.
 Launch with `launch_viewer.cmd` or `python scripts/launch_viewer.py` in VisionLab.
 No new dependencies are required. Raw Cine input remains read-only.
 
@@ -172,3 +173,13 @@ to existing TIME64/display provenance. No binary mask is serialized. Subsequent
 edits retain these creation attributes and create a new `derived_from` record.
 Raw arrays, FrameCache, Cine files, timing, scientific grayscale analysis and raw
 PNG export remain independent of this assistance pipeline.
+
+## Right-side workspace (layout v1.2)
+
+Labels, tool buttons, current-tool settings, frame annotations and layers now share
+the right dock. A first label selection recommends Polygon when allowed; returning
+to a label restores its last compatible drawing tool. The status bar explains the
+next gesture. Selecting a frame annotation switches to Select for editing. Tools
+still obey taxonomy and layer restrictions, preserve immutable history and use raw
+image coordinates. Display controls and all Cine/frame metadata are on the left;
+Queue stays independent. See [layout and navigation](cine_viewer.md#workstation-layout-v12-working-tree-for-review).

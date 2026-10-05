@@ -2,8 +2,7 @@
 
 Implemented on main.
 
-Annotation Editor v1 is additionally implemented in the current working tree
-for review, without a commit/push. See [editor usage](annotation_editor.md) and
+Annotation Editor v1 and UX v1.1 are implemented on main. See [editor usage](annotation_editor.md) and
 [AnnotationDocument architecture](annotation_architecture.md).
 
 Display Enhancement v1 is implemented on main, with default Photometric Ref90,
@@ -150,7 +149,7 @@ settings are not silently forwarded to PredictionProvider or training.
 
 Left/Right step one; Shift+Left/Right step ten; PageUp/PageDown step 100;
 Home/End jump to first/last. All requests clamp to valid indices. Space toggles
-review playback. Review Playback FPS offers 1, 2, 5, 10, 15, 20, 30 (default 10).
+review playback. Review Playback FPS offers 1, 2, 5, 10, 15, 20, 30, 1000 (default 10).
 QTimer never uses header or timestamp-derived experimental frame rates. Playback
 waits for a loaded frame before advancing and stops at the end; slow storage
 can make effective playback slower than the chosen review speed.
@@ -264,3 +263,40 @@ measurement/event analysis remain future work. Default taxonomy discovery
 currently assumes a source checkout; distributing configs in a wheel is future
 packaging work. UI shutdown waits for the current reader operation; there is no
 hard cancellation of a blocked filesystem call.
+
+## Workstation layout v1.2 (working tree for review)
+
+Left: **Image and display**, a scrollable dock with Image information, Timing
+information, Camera information, Current frame and Display. Metadata uses selectable
+label/value rows. Raw TIME64 stays a complete integer; elapsed time uses nine decimal
+places and the existing TIME64 policy. Ref90 advanced reference/provenance is collapsed
+under Advanced display information. Only controls for the selected display mode appear.
+The primary name is **Photometric Normalization (Ref90)** / **亮度标准化（Ref90）**.
+Internal `photometric_ref90_v1`, preset values and Cine-locked gain are unchanged.
+
+Center: image canvas. Right: **Annotation workspace**, a scrollable dock containing
+Taxonomy, Annotation tools, Tool settings, Current frame annotations and Layers.
+Select/Polygon/Wand/BBox/Point buttons share the existing exclusive actions and
+keyboard shortcuts. Polygon settings show live vertex count and completion/cancel
+controls; Select shows the current record and vertex; Wand shows only its existing
+preview controls. Queue remains an independent dock. Bookmarks have their own dock
+available from View, so they do not crowd the annotation workspace.
+
+Selecting a label cancels unfinished drawing, checks `allowed_geometry_types` and
+restores its last compatible drawing tool in this window; otherwise the priority is
+polygon, magic_wand, bbox, point. This is generic taxonomy behavior, without hardcoded
+label IDs. Thus first selecting parent_droplet activates Polygon. Labels with only
+unsupported geometry keep drawing disabled with an explanatory message. A locked or
+hidden layer still blocks drawing. Clicking a frame annotation selects it and activates
+Select for editing. Language preferences retain the existing restart-to-apply behavior.
+
+**Frame step** 1/10/100/1000 affects only Previous/Next transport buttons. Fixed keys
+remain Left/Right ±1, Shift+Left/Right ±10, PgUp/PgDown ±100; Ctrl+PgUp/PgDown add ±1000.
+All destinations clamp. No Fast Scan mode is implemented.
+
+Following the user's revised requirement, **Review playback FPS also offers 1000**.
+This sets a 1 ms target timer interval; it does not guarantee 1000 rendered frames per
+second. The worker and rendering throughput limit actual speed. The existing playback
+loop waits for the current requested frame and advances by exactly one frame, regardless
+of Frame step. The selection is saved/restored in ViewerSession as review_playback_fps.
+Neither this UI rate nor the frame-step setting determines experimental time.

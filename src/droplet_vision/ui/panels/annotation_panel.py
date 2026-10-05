@@ -1,6 +1,6 @@
 from ..i18n import tr
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QGroupBox
 
 
 class AnnotationPanel(QWidget):
@@ -11,30 +11,45 @@ class AnnotationPanel(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         self.taxonomy = {label.label_id: label for label in labels}
-        layout.addWidget(QLabel(tr("Taxonomy")))
+        layout.setContentsMargins(0, 0, 0, 0)
+        labels_group = QGroupBox(tr('Taxonomy'))
+        labels_layout = QVBoxLayout(labels_group)
+        layout.addWidget(labels_group)
         self.labels = QListWidget()
         for label in labels:
             if label.enabled:
                 self.labels.addItem(tr(label.display_name))
                 self.labels.item(self.labels.count() - 1).setData(Qt.ItemDataRole.UserRole, label.label_id)
-        layout.addWidget(self.labels)
-        self.labels.setMaximumHeight(120)
+        labels_layout.addWidget(self.labels)
+        self.labels.setFixedHeight(132)
         self.selected = QLabel(tr("Selected label: none"))
-        self.labels.currentItemChanged.connect(lambda current, previous: self.selected.setText(
-            tr("Selected label: ") + (current.data(Qt.ItemDataRole.UserRole) if current else "none")))
-        self.labels.currentItemChanged.connect(lambda *_: self.label_changed.emit())
-        layout.addWidget(self.selected)
+        self.selected.setWordWrap(True)
+        self.selected.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.labels.currentItemChanged.connect(self._label_selected)
+        labels_layout.addWidget(self.selected)
+        self.tool_host = QWidget()
+        QVBoxLayout(self.tool_host).setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.tool_host)
+        self.records_group = QGroupBox(tr('Current frame annotations'))
+        records_layout = QVBoxLayout(self.records_group)
+        layout.addWidget(self.records_group)
         self.count = QLabel(tr("Current frame annotations: 0"))
-        layout.addWidget(self.count)
+        records_layout.addWidget(self.count)
         self.items = QListWidget()
-        self.items.setMaximumHeight(140)
+        self.items.setFixedHeight(100)
         self.items.currentItemChanged.connect(lambda current, previous: self.annotation_selected.emit(
             current.data(Qt.ItemDataRole.UserRole) if current else None))
-        layout.addWidget(self.items)
+        records_layout.addWidget(self.items)
         self.details = QLabel(tr("No annotation selected"))
         self.details.setWordWrap(True)
         self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.details)
+        # The editor places selection details in the Select tool settings page.
+
+    def _label_selected(self, current, previous):
+        label = self.selected_label()
+        self.selected.setText(tr('Current label: {label}').format(label=tr(label.display_name)) +
+                              '\nID: ' + label.label_id if label else tr('Selected label: none'))
+        self.label_changed.emit()
 
     def selected_label(self):
         item = self.labels.currentItem()

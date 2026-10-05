@@ -1,28 +1,62 @@
+"""Selectable core metadata rows; never statistics from display pixels."""
 from ..i18n import tr
-from PySide6.QtWidgets import QPlainTextEdit
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel
 
 
-class MetadataPanel(QPlainTextEdit):
+class MetadataPanel(QWidget):
+    GROUPS = (
+        ('Image information', [('filename', 'Filename'), ('frame_count', 'Frame count'),
+                               ('resolution', 'Resolution'), ('dtype', 'Data type'), ('compression', 'Compression')]),
+        ('Timing information', [('fps_header', 'Header FPS'), ('fps_timestamp', 'TIME64-derived FPS'),
+                                ('fps_ratio', 'FPS ratio'), ('timing_status', 'Timing status')]),
+        ('Camera information', [('shutter_ns', 'Shutter ns'), ('serial', 'Camera serial'),
+                                ('camera_version', 'Camera version'), ('firmware', 'Firmware'), ('software', 'Software')]),
+        ('Current frame', [('frame_index', 'Frame index'), ('raw_time64', 'Raw TIME64'),
+                           ('relative_timestamp', 'Relative timestamp')]),
+    )
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setReadOnly(True)
-        self.setMinimumWidth(245)
-        self._base = tr("No Cine open")
-        self.setPlainText(self._base)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.values = {}
+        for title, fields in self.GROUPS:
+            group = QGroupBox(tr(title))
+            form = QFormLayout(group)
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            for key, caption in fields:
+                value = QLabel()
+                value.setObjectName('metadata_' + key)
+                value.setTextFormat(Qt.TextFormat.PlainText)
+                value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+                value.setWordWrap(key in ('filename', 'timing_status'))
+                form.addRow(tr(caption), value)
+                self.values[key] = value
+            layout.addWidget(group)
+        self.clear()
+
+    def clear(self):
+        for value in self.values.values():
+            value.setText('—')
+
+    def _set(self, **values):
+        for key, value in values.items():
+            self.values[key].setText(tr('unknown') if value is None else str(value))
 
     def set_metadata(self, metadata, timing):
-        self._base = "\n".join([
-            metadata.filename, tr("Frames: ") + str(metadata.frame_count),
-            tr(f"Resolution: {metadata.width} × {metadata.height}"),
-            tr("Dtype: ") + str(metadata.pixel_dtype), tr("Compression: ") + str(metadata.compression),
-            tr("Header FPS: ") + str(timing.fps_header),
-            tr("TIME64-derived FPS: ") + (f"{timing.fps_timestamp:.6f}" if timing.fps_timestamp else "unknown"),
-            tr("FPS ratio: ") + str(timing.fps_ratio), tr("Timing status: ") + timing.timing_status.value,
-            tr("Shutter ns: ") + str(metadata.shutter_ns), tr("Camera serial: ") + str(metadata.serial),
-            tr("Camera version: ") + str(metadata.camera_version), tr("Firmware: ") + str(metadata.firmware_version),
-            tr("Software: ") + str(metadata.software_version)])
-        self.setPlainText(self._base)
+        self.clear()
+        self._set(filename=metadata.filename, frame_count=metadata.frame_count,
+                  resolution=f'{metadata.width} × {metadata.height}', dtype=metadata.pixel_dtype,
+                  compression=metadata.compression, fps_header=timing.fps_header,
+                  fps_timestamp=None if timing.fps_timestamp is None else f'{timing.fps_timestamp:.6f}',
+                  fps_ratio=None if timing.fps_ratio is None else f'{timing.fps_ratio:.9f}',
+                  timing_status=timing.timing_status.value, shutter_ns=metadata.shutter_ns,
+                  serial=metadata.serial, camera_version=metadata.camera_version,
+                  firmware=metadata.firmware_version, software=metadata.software_version)
 
     def set_frame(self, record):
-        elapsed = "unknown" if record.timestamp_s is None else f"{record.timestamp_s:.9f} s"
-        self.setPlainText(self._base + tr(f"\n\nFrame index: {record.frame_index}\nRaw TIME64: {record.timestamp_time64}\nRelative timestamp: {elapsed}"))
+        self._set(frame_index=record.frame_index, raw_time64=record.timestamp_time64,
+                  relative_timestamp=None if record.timestamp_s is None else f'{record.timestamp_s:.9f} s',
+                  timing_status=record.timing_status.value)

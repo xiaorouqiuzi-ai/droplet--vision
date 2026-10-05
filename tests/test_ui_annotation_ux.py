@@ -26,6 +26,7 @@ class VertexTests(unittest.TestCase):
 
     def polygon(self):
         self.editor.create_annotation('polygon',{'points':[[20,20],[100,20],[100,100],[20,100]]})
+        self.editor.switch_tool('select')  # Label selection now recommends a drawing tool.
         return self.editor.selected_record()
 
     def test_insert_projection_undo_redo_and_delete_minimum(self):

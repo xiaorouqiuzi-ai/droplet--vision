@@ -37,7 +37,7 @@ or physical event classification.
 
 ### Annotation Editor v1 and UX v1.1
 
-UX v1.1 (working tree, for review) adds edge double-click vertex insertion,
+UX v1.1 adds edge double-click vertex insertion,
 selected-vertex deletion and retained-history Undo/Redo. The UI defaults to 中文;
 Settings / 设置 → Language / 语言 persists English or 中文 for the next launch.
 Press **5** for raw-grayscale Magic Wand: preview Replace/Add/Subtract selections,
@@ -54,6 +54,17 @@ are preserved; annotation coordinates always use raw image pixels.
 Mask editing and YOLO integration are not implemented. See
 [Annotation Editor usage](docs/annotation_editor.md) and
 [document architecture](docs/annotation_architecture.md).
+
+### Workstation layout v1.2 (for review)
+
+The left dock groups image, timing, camera, current-frame and display information;
+the right annotation workspace groups labels, tools, current-tool settings, frame
+annotations and layers. Selecting a new label recommends a compatible drawing
+tool (Polygon first), with per-label tool recall. Ref90 is shown as **亮度标准化（Ref90）**
+/ **Photometric Normalization (Ref90)**; the frozen preset ID and parameters are unchanged.
+Transport frame steps are 1/10/100/1000, with Ctrl+PgUp/PgDown for fixed ±1000 jumps.
+Review playback separately offers **1000 FPS** as a target rate (actual performance
+is limited by decoding/rendering); ordinary playback still advances one frame per tick.
 
 ### Frame Sampling and Annotation Queue
 
@@ -226,6 +237,10 @@ versioned settings. Raw Cine files, exported datasets, and weights stay outside
 Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
+
+- UI Layout v1.2 (for review): left information/display dock, right annotation
+  tools and dynamic settings, label-to-tool guidance, clearer Ref90 display name,
+  selectable frame steps and a separate 1000 FPS review-playback option.
 
 - Annotation UX v1.1 (for review): polygon node insertion/deletion, Chinese/English
   catalogs, and raw-only Magic Wand previews with manual confirmation, polygon
