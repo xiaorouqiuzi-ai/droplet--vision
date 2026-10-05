@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+os.environ.setdefault('DROPLET_VISION_LANGUAGE', 'en_US')  # deterministic legacy UI assertions; i18n tests exercise Chinese separately
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 try:
     import numpy as np

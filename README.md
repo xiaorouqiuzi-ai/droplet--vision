@@ -35,7 +35,16 @@ Cine → Frame Viewer → Frame Sampling → Manual Annotation → AI Prediction
 → Scientific Measurement → Event Analysis. Viewer v1 does not perform inference
 or physical event classification.
 
-### Annotation Editor v1
+### Annotation Editor v1 and UX v1.1
+
+UX v1.1 (working tree, for review) adds edge double-click vertex insertion,
+selected-vertex deletion and retained-history Undo/Redo. The UI defaults to 中文;
+Settings / 设置 → Language / 语言 persists English or 中文 for the next launch.
+Press **5** for raw-grayscale Magic Wand: preview Replace/Add/Subtract selections,
+then Confirm to create editable polygons. Magic Wand is a grayscale selection
+aid, not an automatic physical classifier. It uses raw uint8 pixels even when
+Ref90 is displayed. See [editor instructions and limits](docs/annotation_editor.md).
+
 
 Implemented on main: point, bbox and polygon
 drawing, selection, vertex/corner/point editing, deactivation, Undo/Redo and
@@ -218,11 +227,15 @@ Git; see [data policy](docs/data_policy.md).
 
 ## Update summary
 
+- Annotation UX v1.1 (for review): polygon node insertion/deletion, Chinese/English
+  catalogs, and raw-only Magic Wand previews with manual confirmation, polygon
+  correction, multi-region compound undo and recorded selection settings.
+
 - Frame Sampling + Annotation Queue v1: versioned raw
   probing/local refinement, portable atomic queues, resumable manual statuses,
   shared annotation documents and same-Cine frame navigation. No physical event
   classification or model inference is performed.
-- Annotation Editor v1 (uncommitted, for review): added point/bbox/polygon tools,
+- Annotation Editor v1: added point/bbox/polygon tools,
   selection and editing, QUndoStack commands, immutable annotation history,
   atomic JSON documents, dirty protection, autosave and annotated-frame navigation.
   ViewerSession, raw pixels, TIME64 and the frozen Ref90 preset remain separate.

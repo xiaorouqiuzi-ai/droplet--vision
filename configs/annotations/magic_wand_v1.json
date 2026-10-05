@@ -1,0 +1,10 @@
+{
+  "preset_id": "magic_wand_v1",
+  "default_tolerance": 10,
+  "min_tolerance": 0,
+  "max_tolerance": 50,
+  "connectivity": 8,
+  "seed_window": 3,
+  "max_region_fraction": 0.50,
+  "polygon_simplification_tolerance_px": 1.0
+}

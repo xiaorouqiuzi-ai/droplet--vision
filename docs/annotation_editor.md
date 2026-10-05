@@ -1,6 +1,7 @@
-# Annotation Editor v1
+# Annotation Editor v1 / Annotation UX v1.1
 
-Implemented in the current working tree for review; not yet committed or pushed.
+Editor v1 is on main. UX v1.1 additions are in the working tree for review;
+not yet committed or pushed.
 Launch with `launch_viewer.cmd` or `python scripts/launch_viewer.py` in VisionLab.
 No new dependencies are required. Raw Cine input remains read-only.
 
@@ -12,11 +13,11 @@ read from the label's `allowed_geometry_types`; label IDs are open strings.
 
 | Shortcut | Action |
 | --- | --- |
-| 1 / 2 / 3 / 4 | Select / Point / BBox / Polygon |
+| 1 / 2 / 3 / 4 / 5 | Select / Point / BBox / Polygon / Magic Wand |
 | Esc | Cancel temporary drawing or edit |
 | Enter or double-click | Commit polygon (at least three distinct vertices) |
 | Backspace | Remove last polygon vertex |
-| Delete | Deactivate selected annotation, retaining history |
+| Delete | Delete selected polygon vertex; otherwise deactivate selected annotation |
 | Ctrl+Z | Undo |
 | Ctrl+Y or Ctrl+Shift+Z | Redo |
 | Alt+Left / Alt+Right | Previous / next frame with active annotations |
@@ -99,7 +100,75 @@ ViewerSession continues to contain only UI state/bookmarks/notes.
 
 Only point, bbox and polygon documents are editable/validated in v1; other
 geometry schemas remain future extensions and unsupported documents fail closed.
-No whole-object polygon/bbox translation, vertex insertion/deletion after commit,
-mask brush, database, dataset export, YOLO/Torch, inference, tracking or scientific
+No whole-object polygon/bbox translation, mask brush, database, dataset export, YOLO/Torch, inference, tracking or scientific
 measurement is included. There are count indicators instead of timeline ticks.
 History is in-memory until save/autosave; large-history indexing is future work.
+
+## Polygon vertex editing (UX v1.1)
+
+In Select mode, double-click near an edge of the selected polygon. The new point
+is the projection onto the nearest segment, inserted in boundary order (including
+the closing segment). The pick tolerance is in screen pixels; the stored result
+is in raw image coordinates, independent of zoom, pan and display mode.
+Click a vertex handle to select it (orange); drag to move it. Delete removes the
+selected vertex only if at least three vertices remain. Click the object/list to
+return to annotation selection before deactivating the whole object. Insertion,
+deletion and movement all create derived records and use the existing QUndoStack;
+old geometry and predictions are never overwritten.
+
+## 中文 / English
+
+The default is `zh_CN`. Settings / 设置 → Language / 语言 → 中文 or English
+persists a local QSettings preference. Restart to apply the language consistently;
+the current document is not rebuilt or discarded. Central catalogs live under
+`src/droplet_vision/ui/translations/`; missing keys fall back to English/source text.
+Core menus, panels, actions and prompts are translated; diagnostic codes remain
+stable. Taxonomy display names can be translated, but `label_id`, JSON statuses,
+record IDs and arbitrary new taxonomy labels are unchanged. Unknown display names
+remain as authored in the taxonomy. No scientific labels are inferred.
+
+## Magic Wand assisted annotation
+
+Choose an enabled label allowing polygon geometry and an unlocked Manual/Reviewed
+layer, then press **5**. Click a seed, adjust Tolerance or Connectivity, and use
+Replace/Add/Subtract for subsequent clicks. The translucent mask is temporary.
+Confirm (or Enter) creates polygons; Cancel/Esc or frame changes discard preview.
+No records are created before confirmation. Select mode can immediately correct
+the resulting polygon vertices. Multiple polygons from one confirmation share
+one compound Undo/Redo command.
+
+**Magic Wand is a grayscale selection aid, not an automatic physical classifier.**
+It reads the current cached **raw 2D uint8** array without mutation or further Cine
+reads. Other dtypes/color input disable the tool; no scientific pixel conversion
+is performed. Ref90/Raw/Manual/Auto affect only what is displayed.
+
+Parameters have a single source: `configs/annotations/magic_wand_v1.json`.
+Defaults are tolerance 10 (slider 0–50), 8-connectivity (4 also available), a
+clamped 3×3 seed median, maximum region fraction 0.50 and RDP simplification
+1.0 raw pixel. These are assistance settings, not scientific thresholds.
+A pixel is eligible when its absolute difference from the seed median is at most
+the tolerance. If noise makes the clicked pixel ineligible, the nearest eligible
+pixel in the same 3×3 window starts the flood fill (ties by row, then column).
+The noisy pixel is not silently added. Growing uses a bounded breadth-first walk;
+excessively large regions or combined selections warn and cannot be confirmed.
+Changing tolerance/connectivity recomputes only the latest operation against its
+previous selection, so repeated adjustments do not accumulate duplicate regions.
+
+Conversion traces ordered pixel-cell edges, separates diagonal contacts, maps
+edges into the editor's raw pixel-center bounds and applies closed-ring RDP.
+Simplification falls back if it produces fewer than three points or a crossing.
+Disconnected components become separate records with the same chosen label.
+**Holes are not supported by polygon v1:** confirmation warns and leaves the
+selection uncommitted; adjust it rather than silently filling holes. Degenerate
+regions that cannot form a valid polygon are also refused. The polygon is an
+approximation of the selection; review and correct its vertices before ground truth.
+Very complex contours can take longer on the GUI thread; no background classifier,
+mask brush or automatic physical interpretation is included.
+
+New records are `source=manual`, `review_status=unreviewed`. Attributes record
+`creation_tool=magic_wand`, preset ID, tolerance, connectivity, seed reference,
+all seed/operation settings, size limit and simplification tolerance, in addition
+to existing TIME64/display provenance. No binary mask is serialized. Subsequent
+edits retain these creation attributes and create a new `derived_from` record.
+Raw arrays, FrameCache, Cine files, timing, scientific grayscale analysis and raw
+PNG export remain independent of this assistance pipeline.

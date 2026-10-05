@@ -1,3 +1,4 @@
+from ..i18n import tr
 from PySide6.QtCore import Qt, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import QWidget, QSlider, QSpinBox, QHBoxLayout, QLabel
 
@@ -13,7 +14,7 @@ class Timeline(QWidget):
         self.spinbox.setObjectName("frameSpinbox")
         self.end_label = QLabel("/ 0")
         layout = QHBoxLayout(self)
-        layout.addWidget(QLabel("Frame"))
+        layout.addWidget(QLabel(tr("Frame")))
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.spinbox)
         layout.addWidget(self.end_label)

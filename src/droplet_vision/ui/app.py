@@ -1,5 +1,6 @@
 """Viewer application entry point."""
 from __future__ import annotations
+from .i18n import tr
 import argparse
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -7,7 +8,7 @@ from .main_window import MainWindow
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Droplet Annotation Workstation — Annotation Editor v1")
+    parser = argparse.ArgumentParser(description=tr("Droplet Annotation Workstation — Annotation Editor v1"))
     parser.add_argument("--cine")
     parser.add_argument("--taxonomy", help="Alternative taxonomy JSON")
     args = parser.parse_args(argv)

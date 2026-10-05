@@ -1,5 +1,6 @@
 """Controls for a Qt-independent, immutable display-settings value."""
 from __future__ import annotations
+from ..i18n import tr
 from dataclasses import replace
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
@@ -17,11 +18,11 @@ class DisplayPanel(QWidget):
         self.settings = DisplaySettings()
         self.previous_enhanced_mode = "manual"
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Display only — raw pixels unchanged"))
+        layout.addWidget(QLabel(tr("Display only — raw pixels unchanged")))
         self.mode = QComboBox()
         self.mode.setObjectName("displayMode")
         for key, title in display_modes().items():
-            self.mode.addItem(title, key)
+            self.mode.addItem(tr(title), key)
         layout.addWidget(self.mode)
         self.manual_controls = QWidget()
         manual_layout = QVBoxLayout(self.manual_controls)
@@ -42,7 +43,7 @@ class DisplayPanel(QWidget):
         self.auto_controls = QWidget()
         auto_layout = QHBoxLayout(self.auto_controls)
         auto_layout.setContentsMargins(0, 0, 0, 0)
-        for name, title in (("percentile_low", "Low"), ("percentile_high", "High")):
+        for name, title in (("percentile_low", tr("Low")), ("percentile_high", tr("High"))):
             control = QDoubleSpinBox()
             control.setDecimals(1)
             control.setSingleStep(.1)
@@ -54,15 +55,15 @@ class DisplayPanel(QWidget):
             auto_layout.addWidget(control)
             control.valueChanged.connect(lambda value, field=name: self._percentile_changed(field, value))
         layout.addWidget(self.auto_controls)
-        self.photometric_info = QLabel("Photometric reference: no Cine open")
+        self.photometric_info = QLabel(tr("Photometric reference: no Cine open"))
         self.photometric_info.setWordWrap(True)
         self.photometric_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.photometric_info)
-        self.recalculate_button = QPushButton("Recalculate Reference")
+        self.recalculate_button = QPushButton(tr("Recalculate Reference"))
         self.recalculate_button.setEnabled(False)
         self.recalculate_button.clicked.connect(self.recalculate_requested.emit)
         layout.addWidget(self.recalculate_button)
-        self.reset_button = QPushButton("Reset Display")
+        self.reset_button = QPushButton(tr("Reset Display"))
         self.reset_button.clicked.connect(self.reset)
         layout.addWidget(self.reset_button)
         self.mode.currentIndexChanged.connect(lambda _: self.set_settings(replace(self.settings, mode=self.mode.currentData())))
@@ -90,9 +91,9 @@ class DisplayPanel(QWidget):
             getattr(self, name).setValue(round(getattr(settings, name) * 100))
         self.percentile_low.setValue(settings.percentile_low)
         self.percentile_high.setValue(settings.percentile_high)
-        self.value_labels["brightness"].setText(f"Brightness: {settings.brightness * 100:+.0f}")
-        self.value_labels["contrast"].setText(f"Contrast: {settings.contrast:.2f}")
-        self.value_labels["gamma"].setText(f"Gamma: {settings.gamma:.2f}")
+        self.value_labels["brightness"].setText(tr(f"Brightness: {settings.brightness * 100:+.0f}"))
+        self.value_labels["contrast"].setText(tr(f"Contrast: {settings.contrast:.2f}"))
+        self.value_labels["gamma"].setText(tr(f"Gamma: {settings.gamma:.2f}"))
         self.manual_controls.setEnabled(settings.mode == "manual")
         self.auto_controls.setEnabled(settings.mode == "auto_percentile")
         del blockers
@@ -109,10 +110,10 @@ class DisplayPanel(QWidget):
         self.recalculate_button.setEnabled(cine_open)
         if reference is None:
             state = ("PHOTOMETRIC_REFERENCE_FAILED\n" + error if error else
-                     "Initializing Photometric Ref90..." if cine_open else "No Cine open")
-            text = f"Preset: {PRESET_ID}\nReference fraction: {REFERENCE_FRACTION:.0%}\nStatus: {state}"
+                     tr("Initializing Photometric Ref90...") if cine_open else tr("No Cine open"))
+            text = tr(f"Preset: {PRESET_ID}\nReference fraction: {REFERENCE_FRACTION:.0%}\nStatus: {state}")
         else:
-            text = (f"Preset: {reference.preset_id}\n"
+            text = (tr(f"Preset: {reference.preset_id}\n"
                     f"Reference frame: {reference.reference_frame_index}\n"
                     f"Reference fraction: {reference.reference_fraction:.0%}\n"
                     f"Reference P90: {reference.reference_p90:g}\n"
@@ -120,7 +121,7 @@ class DisplayPanel(QWidget):
                     f"Raw gain: {reference.gain_raw:.6g}\n"
                     f"Applied gain: {reference.gain_used:.6g}\n"
                     f"Reference saturation (255): {reference.norm_255_fraction:.3%}\n"
-                    f"Status: {reference.photometric_status}")
+                    f"Status: {reference.photometric_status}"))
         self.photometric_info.setText(text)
 
     def show_enhanced(self):

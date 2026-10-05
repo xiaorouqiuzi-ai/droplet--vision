@@ -104,6 +104,7 @@ class AnnotationToolsTests(unittest.TestCase):
         self.assertEqual(derived.geometry['points'][-1], [120, 110])
         self.assertEqual(derived.derived_from, original.annotation_id)
         self.assertEqual(self.editor.document.records.get(original.annotation_id).geometry, original.geometry)
+        self.editor.select(derived.annotation_id)  # select the object, not the vertex, before deactivation
         QTest.keyClick(self.canvas, Qt.Key.Key_Delete)
         self.assertFalse(self.editor.document.active_records())
         QTest.keyClick(self.canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)

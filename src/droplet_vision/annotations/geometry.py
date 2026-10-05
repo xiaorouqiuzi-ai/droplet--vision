@@ -5,6 +5,19 @@ from numbers import Real
 from typing import Any, Dict
 
 
+def nearest_polygon_segment(points, position):
+    """Return insertion segment, projected RAW point and squared distance."""
+    x, y = position
+    candidates = []
+    for index, (a, b) in enumerate(zip(points, points[1:] + points[:1])):
+        dx, dy = b[0]-a[0], b[1]-a[1]
+        length = dx*dx+dy*dy
+        t = max(0, min(1, ((x-a[0])*dx+(y-a[1])*dy)/length)) if length else 0
+        p = [a[0]+t*dx, a[1]+t*dy]
+        candidates.append((index, p, (x-p[0])**2+(y-p[1])**2))
+    return min(candidates, key=lambda value: (value[2], value[0]))
+
+
 def clamp_point(point, width: int, height: int):
     return [max(0.0, min(width - 1.0, float(point[0]))),
             max(0.0, min(height - 1.0, float(point[1])))]

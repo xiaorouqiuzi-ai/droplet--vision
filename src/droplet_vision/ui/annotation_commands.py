@@ -1,10 +1,11 @@
 """QUndoStack commands change visibility, never erase immutable record history."""
+from .i18n import tr
 from PySide6.QtGui import QUndoCommand
 
 
 class AddAnnotationCommand(QUndoCommand):
     def __init__(self, document, record, layer_id="manual", changed=lambda: None):
-        super().__init__("Add " + record.geometry_type)
+        super().__init__(tr("Add ") + record.geometry_type)
         self.document, self.record, self.layer_id = document, record, layer_id
         self.changed = changed
         self.added = False
@@ -26,7 +27,7 @@ class EditAnnotationCommand(AddAnnotationCommand):
     def __init__(self, document, old_id, derived, layer_id, changed=lambda: None):
         super().__init__(document, derived, layer_id, changed)
         self.old_id = old_id
-        self.setText("Edit " + derived.geometry_type)
+        self.setText(tr("Edit ") + derived.geometry_type)
 
     def redo(self):
         if not self.added:
@@ -42,7 +43,7 @@ class EditAnnotationCommand(AddAnnotationCommand):
 
 class DeactivateAnnotationCommand(QUndoCommand):
     def __init__(self, document, annotation_id, changed=lambda: None):
-        super().__init__("Deactivate annotation")
+        super().__init__(tr("Deactivate annotation"))
         self.document, self.annotation_id, self.changed = document, annotation_id, changed
 
     def redo(self):

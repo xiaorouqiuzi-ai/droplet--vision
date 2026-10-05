@@ -1,6 +1,8 @@
 """Point, box, polygon and select tools operating exclusively in scene/raw coordinates."""
+from ..i18n import tr
 from copy import deepcopy
 from .base import AnnotationTool
+from ...annotations.geometry import nearest_polygon_segment
 
 
 class EditorTool(AnnotationTool):
@@ -87,7 +89,7 @@ class PolygonTool(EditorTool):
         if len(points) > 1 and points[0] == points[-1]:
             points.pop()
         if len(points) < 3:
-            self.editor.message("Polygon requires at least three vertices; continue or Esc to cancel.")
+            self.editor.message(tr("Polygon requires at least three vertices; continue or Esc to cancel."))
             return
         if self.editor.create_annotation(self.geometry_type, {"points": points}):
             self.cancel()
@@ -110,9 +112,16 @@ class SelectTool(EditorTool):
     def mouse_press(self, position):
         handle = self.editor.handle_at(position)
         if handle is None:
-            self.editor.select(self.editor.annotation_at(position))
+            selected = self.editor.selected_record()
+            near_edge = (selected is not None and selected.geometry_type == 'polygon' and
+                         nearest_polygon_segment(selected.geometry['points'], position)[2]**.5 *
+                         abs(self.editor.canvas.transform().m11()) <= 12)
+            if not near_edge:
+                self.editor.select(self.editor.annotation_at(position))
             handle = self.editor.handle_at(position)
         record = self.editor.selected_record()
+        self.editor.selected_vertex = handle if record is not None and record.geometry_type == 'polygon' else None
+        self.editor.refresh_selection()
         if handle is not None and record is not None and self.editor.can_edit(record):
             self.handle = handle
             self.original = record
@@ -146,8 +155,15 @@ class SelectTool(EditorTool):
 
     def commit(self):
         if self.original is not None and self.working != self.original.geometry:
+            vertex = self.editor.selected_vertex
             self.editor.edit_annotation(self.original.annotation_id, self.working)
+            self.editor.selected_vertex = vertex
+            self.editor.refresh_selection()
         self.cancel()
+
+    def mouse_double_click(self, position):
+        self.cancel()
+        self.editor.insert_vertex(position)
 
     def cancel(self):
         self.handle = self.original = self.working = None

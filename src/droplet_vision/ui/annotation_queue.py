@@ -1,5 +1,6 @@
 """Queue workflow coordinates existing asynchronous Cine and annotation APIs."""
 from __future__ import annotations
+from .i18n import tr
 import hashlib
 from pathlib import Path
 from PySide6.QtCore import QObject, Qt
@@ -21,12 +22,12 @@ class QueueCoordinator(QObject):
         self.unavailable = {}
         self._initiating = False
         self.panel = QueuePanel()
-        self.dock = QDockWidget("Annotation Queue", window)
+        self.dock = QDockWidget(tr("Annotation Queue"), window)
         self.dock.setObjectName("annotationQueueDock")
         self.dock.setWidget(self.panel)
         window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.dock.hide()  # existing editor workspace remains usable until a queue is opened
-        menu = window.menuBar().addMenu("Queue")
+        menu = window.menuBar().addMenu(tr("Queue"))
         menu.addAction(self.dock.toggleViewAction())
         actions = {"open_queue": self.open_dialog, "set_root": self.root_dialog,
                    "open_item": self.open_selected, "next": lambda: self.pending_item(1),
@@ -55,7 +56,7 @@ class QueueCoordinator(QObject):
                 outside_source(self.path, self.root)
             self.queue.save(self.path)
         except Exception as error:
-            self.window._error("Queue save failed; changes remain in memory: " + str(error))
+            self.window._error(tr("Queue save failed; changes remain in memory: ") + str(error))
             self.refresh()
             return False
         self.refresh()
@@ -73,7 +74,7 @@ class QueueCoordinator(QObject):
             return False
         self.queue, self.path = queue, path
         self.root = None
-        self.panel.root_label.setText("Dataset root: not set (local only)")
+        self.panel.root_label.setText(tr("Dataset root: not set (local only)"))
         self.current_id = self.pending = None
         self.unavailable = {}
         if root is not None:
@@ -95,14 +96,14 @@ class QueueCoordinator(QObject):
             for item in self.queue.items:
                 try:
                     if not resolve_relative(root, item.relative_cine_path).is_file():
-                        self.unavailable[item.item_id] = "Cine file not found"
+                        self.unavailable[item.item_id] = tr("Cine file not found")
                 except ValueError as error:
                     self.unavailable[item.item_id] = str(error)
-        self.panel.root_label.setText("Dataset root: " + root.name + " (local only)")
+        self.panel.root_label.setText(tr("Dataset root: ") + root.name + " (local only)")
         self.refresh()
 
     def open_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(self.window, "Open Annotation Queue", "outputs/annotation_queues", "Queue JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self.window, tr("Open Annotation Queue"), "outputs/annotation_queues", tr("Queue JSON (*.json)"))
         if path:
             try:
                 if self.load(path):
@@ -111,7 +112,7 @@ class QueueCoordinator(QObject):
                 self.window._error(str(error))
 
     def root_dialog(self):
-        root = QFileDialog.getExistingDirectory(self.window, "Select local dataset root")
+        root = QFileDialog.getExistingDirectory(self.window, tr("Select local dataset root"))
         if root:
             try:
                 self.set_root(root)
@@ -139,7 +140,7 @@ class QueueCoordinator(QObject):
 
     def open_item(self, item_id):
         if self.queue is None or self.root is None:
-            self.window.statusBar().showMessage("Open a queue and set its local dataset root first.")
+            self.window.statusBar().showMessage(tr("Open a queue and set its local dataset root first."))
             return False
         item = self.queue.get(item_id)
         try:
@@ -151,11 +152,11 @@ class QueueCoordinator(QObject):
                 linked = resolve_relative(self.path.parent, item.annotation_document)
                 outside_source(linked, self.root)
                 if not linked.is_file():
-                    raise FileNotFoundError("Linked AnnotationDocument is unavailable")
+                    raise FileNotFoundError(tr("Linked AnnotationDocument is unavailable"))
         except Exception as error:
             self.unavailable[item_id] = str(error)
             self.refresh()
-            self.window._error("Queue item unavailable: " + str(error))
+            self.window._error(tr("Queue item unavailable: ") + str(error))
             return False
         self.window.pause()
         same = self.window.cine_path is not None and self.window.cine_path.resolve() == path and self.window.metadata is not None
@@ -169,7 +170,7 @@ class QueueCoordinator(QObject):
                 try:
                     restored = AnnotationDocument.load(editor.path) if editor.path else None
                 except Exception as error:
-                    self.window._error("Could not restore saved annotations: " + str(error))
+                    self.window._error(tr("Could not restore saved annotations: ") + str(error))
                     return False
                 if restored is None:
                     editor._create_document()
@@ -197,8 +198,8 @@ class QueueCoordinator(QObject):
         if self.pending is not None:
             item = self.queue.get(self.pending[0])
             if metadata.frame_count != item.frame_count or metadata.filename != item.cine_filename:
-                self.on_failure("Cine identity does not match queue")
-                self.window._error("Cine identity does not match queue")
+                self.on_failure(tr("Cine identity does not match queue"))
+                self.window._error(tr("Cine identity does not match queue"))
                 return
             self.window.navigate(item.frame_index)
 
@@ -218,7 +219,7 @@ class QueueCoordinator(QObject):
         except Exception as error:
             self.unavailable[item_id] = str(error)
             self.refresh()
-            self.window._error("Queue annotation load failed: " + str(error))
+            self.window._error(tr("Queue annotation load failed: ") + str(error))
             return
         self.current_id = item_id
         if item.status == "PENDING":
@@ -240,7 +241,7 @@ class QueueCoordinator(QObject):
             item = self.queue.items[offset]
             if item.status == "PENDING" and item.item_id not in self.unavailable:
                 return self.open_item(item.item_id)
-        self.window.statusBar().showMessage("No pending item in that direction; select an IN_PROGRESS item to resume it.")
+        self.window.statusBar().showMessage(tr("No pending item in that direction; select an IN_PROGRESS item to resume it."))
         return False
 
     def mark(self, status):
@@ -250,7 +251,7 @@ class QueueCoordinator(QObject):
         item = self.queue.get(self.current_id)
         record = self.window.current_record
         if record is None or record.frame_index != item.frame_index or self.window.cine_path.resolve() != resolve_relative(self.root, item.relative_cine_path):
-            self.window.statusBar().showMessage("Open the queue item before marking its status.")
+            self.window.statusBar().showMessage(tr("Open the queue item before marking its status."))
             return False
         self.queue.update(self.current_id, status=status)
         return self.save()
@@ -258,7 +259,7 @@ class QueueCoordinator(QObject):
     def note_dialog(self):
         item_id = self.panel.selected_id() or self.current_id
         if self.queue is not None and item_id:
-            text, ok = QInputDialog.getMultiLineText(self.window, "Queue note", "Manual note", self.queue.get(item_id).notes)
+            text, ok = QInputDialog.getMultiLineText(self.window, tr("Queue note"), tr("Manual note"), self.queue.get(item_id).notes)
             if ok:
                 self.queue.update(item_id, notes=text)
                 self.save()
@@ -285,7 +286,7 @@ class QueueCoordinator(QObject):
             relative_cine = self.window.cine_path.resolve().relative_to(self.root).as_posix()
             reference = Path(path).resolve().relative_to(self.path.parent).as_posix()
         except ValueError:
-            self.window.statusBar().showMessage("Annotation saved; queue links require a document inside the queue folder.")
+            self.window.statusBar().showMessage(tr("Annotation saved; queue links require a document inside the queue folder."))
             return
         self.queue.link_document(relative_cine, reference)
         self.save()

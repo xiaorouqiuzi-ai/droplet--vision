@@ -1,4 +1,5 @@
 """Display conversion never changes scientific pixels; PNG exports use raw data."""
+from .i18n import tr
 from pathlib import Path
 import numpy as np
 from PySide6.QtGui import QImage
@@ -26,7 +27,7 @@ def export_png(raw: np.ndarray, path: Path) -> None:
     from PIL import Image
     path = Path(path)
     if path.suffix.lower() != ".png" or path.resolve().suffix.lower() != ".png":
-        raise ValueError("Frame export must use a .png destination")
+        raise ValueError(tr("Frame export must use a .png destination"))
     if not (raw.ndim == 2 and raw.dtype in (np.uint8, np.uint16) or
             raw.ndim == 3 and raw.shape[2] == 3 and raw.dtype == np.uint8):
         raise ValueError("Unsupported raw export format")

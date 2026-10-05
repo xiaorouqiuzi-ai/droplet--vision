@@ -1,3 +1,4 @@
+from ..i18n import tr
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QComboBox, QLabel
 
@@ -18,10 +19,10 @@ class TransportControls(QWidget):
             button = QPushButton(text)
             button.clicked.connect(callback)
             layout.addWidget(button)
-        self.play = QPushButton("Play")
+        self.play = QPushButton(tr("Play"))
         self.play.clicked.connect(self.toggle_play.emit)
         layout.addWidget(self.play)
-        layout.addWidget(QLabel("Review playback FPS"))
+        layout.addWidget(QLabel(tr("Review playback FPS")))
         self.fps = QComboBox()
         self.fps.addItems(["1", "2", "5", "10", "15", "20", "30"])
         self.fps.setCurrentText("10")
