@@ -1,294 +1,340 @@
 # Droplet Vision
 
-Repository: `droplet--vision` · Python package: `droplet_vision`
+<img src="src/droplet_vision/ui/assets/icons/planico.png" alt="Droplet Vision icon" width="96">
 
-Quantitative analysis of high-speed suspended-droplet experiments, preserving
-the original research focus on droplet deformation and extending it to:
+**High-Speed Droplet Annotation, Review and AI-Assisted Quantification Workstation**
 
-- parent-droplet evolution;
-- internal cavity/bubble evolution;
-- puffing and micro-explosion;
-- daughter-droplet formation and secondary atomization.
+用于高速液滴 Cine 数据浏览、人工标注、协同审阅和未来 AI 辅助定量分析的科研工作站。
 
-Pipeline:
+Droplet Vision provides the **Droplet Annotation Workstation** desktop UI for
+read-only Phantom Cine viewing, traceable human annotation and offline review.
+AI-assisted quantification is the long-term direction: trained models,
+automated physical measurements and event detection are **not supplied**.
 
-**Cine → Segmentation → Tracking → State/Event Analysis → Scientific Metrics → Statistical Dataset**
+## Why Droplet Vision?
 
-Cine infrastructure decodes frames before segmentation. Statistical outputs
-support figures and papers. YOLO / deep learning are segmentation tools, not
-physical conclusions. No trained models or implemented segmentation pipeline
-are supplied in this scaffold.
+High-speed experiments produce more frames than researchers can label exhaustively.
+Reproducible access, sparse sampling and human review turn visual observations into
+records whose geometry, timing and revisions can be checked later.
 
-## Project status
-
-| Phase | Scope | Status |
-| --- | --- | --- |
-| 1 | Cine reader / metadata / TIME64 / inventory | Implemented (v1) |
-| 2 | Classical CV baseline | Planned |
-| 3 | AI segmentation | Planned |
-| 4 | Scientific measurement and event analysis | Planned |
-
-Cine Viewer UI v1 and display-only image enhancement are implemented on main.
-Its long-term target is the **Droplet Annotation Workstation**:
-Cine → Frame Viewer → Frame Sampling → Manual Annotation → AI Prediction Overlay
-→ Human Review / Correction → Ground Truth → Dataset Export → YOLO / U-Net
-→ Scientific Measurement → Event Analysis. Viewer v1 does not perform inference
-or physical event classification.
-
-### Annotation Editor v1 and UX v1.1
-
-UX v1.1 adds edge double-click vertex insertion,
-selected-vertex deletion and retained-history Undo/Redo. The UI defaults to 中文;
-Settings / 设置 → Language / 语言 persists English or 中文 for the next launch.
-Press **5** for raw-grayscale Magic Wand: preview Replace/Add/Subtract selections,
-then Confirm to create editable polygons. Magic Wand is a grayscale selection
-aid, not an automatic physical classifier. It uses raw uint8 pixels even when
-Ref90 is displayed. See [editor instructions and limits](docs/annotation_editor.md).
-
-
-Implemented on main: point, bbox and polygon
-drawing, selection, vertex/corner/point editing, deactivation, Undo/Redo and
-independent annotation JSON save/load with dirty-state protection and autosave.
-Labels remain open taxonomy strings. Immutable history and prediction provenance
-are preserved; annotation coordinates always use raw image pixels.
-Mask editing and YOLO integration are not implemented. See
-[Annotation Editor usage](docs/annotation_editor.md) and
-[document architecture](docs/annotation_architecture.md).
-
-### Workstation layout v1.2 (for review)
-
-The left dock groups image, timing, camera, current-frame and display information;
-the right annotation workspace groups labels, tools, current-tool settings, frame
-annotations and layers. Selecting a new label recommends a compatible drawing
-tool (Polygon first), with per-label tool recall. Ref90 is shown as **亮度标准化（Ref90）**
-/ **Photometric Normalization (Ref90)**; the frozen preset ID and parameters are unchanged.
-Transport frame steps are 1/10/100/1000, with Ctrl+PgUp/PgDown for fixed ±1000 jumps.
-Review playback separately offers **1000 FPS** as a target rate (actual performance
-is limited by decoding/rendering); ordinary playback still advances one frame per tick.
-
-### Frame Sampling and Annotation Queue
-
-Sampling v1 combines lifecycle anchors with raw-image change peaks. **Change
-peaks are sampling heuristics, not physical event classifications.** Build a
-portable JSON queue with `python scripts/build_annotation_queue.py --root
-"path/to/dataset" --output "outputs/annotation_queues/run/queue.json" --preview`
-(enter the command on one line). In the Viewer, use **Queue → Open Queue...**,
-set the local dataset root, then open items, annotate and explicitly mark progress.
-Frame Sampling + Annotation Queue v1 is implemented on main; see
-[sampling and queue workflow](docs/frame_sampling_queue.md).
-
-## Environment Setup
-
-The project is currently developed and validated with Python 3.12.
-
-### Current tested development environment
-
-These versions describe the current tested development environment, not a
-permanent dependency lock for the project.
-
-- Python 3.12.10
-- NumPy 2.0.2
-- Pillow 11.3.0
-- PIMS 0.7
-- ImageIO 2.37.2
-- tifffile 2024.8.30
-- PySide6 6.10.2
-
-This combination is validated for current Cine Reader and Viewer v1 smoke tests
-with a real Phantom Cine: random frame access, TIME64 parsing, metadata,
-inventory, Qt frame navigation, timestamp display, export pixel equality and
-close/reopen. This is validation of software behavior on the tested Cine, not a
-resolution of its timing mismatch or validation of all Phantom formats.
-
-Create a dedicated environment using Python 3.12; do not install project
-dependencies directly into system Python:
-
-```console
-python -m venv VisionLab
+```text
+Cine → reproducible access → assisted annotation → human review
+                                               → future prediction → measurement
 ```
 
-Windows CMD activation: `VisionLab\Scripts\activate`. In PowerShell use
-`.\VisionLab\Scripts\Activate.ps1`, or invoke `VisionLab\Scripts\python.exe`
-directly. On Bash use `source VisionLab/bin/activate` when created on POSIX.
-Check `python -c "import sys; print(sys.executable); print(sys.version)"` before
-running installation or tests. Use that same interpreter throughout.
+A segmentation model is one replaceable module. It does not establish physical
+phase identity or experimental timing validity.
 
-The following single-line installation command works in PowerShell or Bash
-after activating the dedicated environment (already verified environments do
-not need reinstallation):
+## Feature Overview
 
-```console
-python -m pip install numpy==2.0.2 pillow==11.3.0 pims==0.7 imageio==2.37.2 tifffile==2024.8.30 PySide6==6.10.2
-python -m pip check
-```
+| Status | Capability |
+| --- | --- |
+| Implemented | Read-only Cine access, metadata, raw TIME64 and conservative timing diagnostics |
+| Implemented | Asynchronous Viewer, bounded raw cache, zoom/pan/Auto Fit, raw PNG export and ViewerSession |
+| Implemented | Cine-locked Photometric Normalization (Ref90), Raw, Manual and Auto display modes |
+| Implemented | Polygon drafts, vertex/midpoint editing, Point, raw-grayscale Magic Wand and Undo/Redo |
+| Implemented | Scheme-driven objects/colors, daughter numbering, bilingual live UI and clickable annotation markers |
+| Implemented | Multi-label Frame State, separate quality/notes, immutable history and atomic AnnotationDocument saving |
+| Implemented | Deterministic sampling, resumable Annotation Queue and offline `.dvrpkg` review/merge |
+| Experimental scope | Magic Wand proposals and the human-reviewed Ref90 preprocessing candidate require visual judgment |
+| Planned | Dataset export, production Prediction Store/import, YOLO-seg/U-Net integration, tracking, measurement and temporal event inference |
 
-Expected: `No broken requirements found.` This was confirmed in VisionLab.
-No packages were installed or changed during Viewer v1 development.
+Implemented describes source capabilities, not a published release or validation
+on every Phantom encoding. See [limitations](#known-limitations).
 
-Optional Jupyter kernel setup:
+## Interface Overview
 
-```console
-python -m pip install ipykernel
-python -m ipykernel install --user --name visionlab --display-name "Python (VisionLab)"
-```
+![Droplet Annotation Workstation in Portable Review Mode](Example/236.png)
 
-Jupyter is not a Viewer dependency. OpenCV, scikit-image, SciPy, pandas,
-matplotlib, PyTorch and Ultralytics YOLO are not currently required; introduce
-them only when the relevant modules are developed and separately approved.
-Base package dependencies stay empty; `cine` and `ui` are optional extras.
+Example workspace in Portable Review Mode, with object overlays, annotation
+controls, Frame State options and the About dialog. The screenshot is an
+interface example, not a validated physical interpretation of the image.
 
-### Launch Cine Viewer
+| Area | Purpose |
+| --- | --- |
+| Left | Cine/timing/camera/current-frame information, display, Scheme, document location and current annotations |
+| Center | Raw-coordinate image canvas and editable overlays |
+| Right | Drawing layer, object buttons, tools, tool settings, Frame State and quality/notes |
+| Bottom | Human-annotation markers, timeline, fixed frame jumps and independent target playback FPS |
 
-On Windows, double-click **`launch_viewer.cmd`** in the repository root.
-For an existing external VisionLab environment, create the ignored local file
-`configs/viewer.local.txt` containing only its full `python.exe` path (without
-quotes). This local file is not committed. The launcher checks, in order:
-`DROPLET_VISION_PYTHON`, that local file, `VisionLab/Scripts/python.exe` inside
-the repository, then the activated virtual environment. It does not install
-dependencies or fall back to system Python. If no interpreter is found, it
-shows setup instructions. Keep the console open while using the viewer;
-startup errors remain visible there.
+Queue and bookmarks have separate docks. Menus: **File → Annotation → Queue →
+View → Model → Settings → Help**. 中文 is the default; the language button or
+Settings changes visible text immediately without discarding editing state.
 
-Arguments are supported, for example:
+## Quick Start
 
-```console
-launch_viewer.cmd --cine path/to/sample.cine
-```
+After [installation](#installation), run at repository root in the activated environment:
 
-From the repository root in VisionLab:
-
-```console
+```powershell
 python scripts/launch_viewer.py
-python scripts/launch_viewer.py --cine path/to/sample.cine
-python scripts/launch_viewer.py --taxonomy configs/annotations/default_taxonomy.json
 ```
 
-The taxonomy is an open JSON label list, not a closed enum. Add a new `label_id`
-and restart the Viewer to show it, without editing UI Python. See
-[Viewer and annotation architecture](docs/cine_viewer.md).
+Windows also supports `launch_viewer.cmd`. For double-click use with an external
+environment, put its interpreter path in ignored `configs/viewer.local.txt`;
+see [launcher setup](docs/getting_started.md#launch). It does not install packages
+or silently choose system Python.
 
-### Display enhancement
+1. **File → Open Cine…**; wait for the image and reference initialization.
+2. Apply an **Annotation Scheme**, then choose the unlocked **Manual** drawing layer.
+3. Choose an object, draw a Polygon, close the dashed draft, adjust it and **Confirm**.
+4. Set Frame State and quality/notes; **Annotation → Save Annotations**.
+5. Use [Queue](docs/frame_sampling_queue.md) for sampled work or
+   [review packages](docs/portable_review_package.md) for collaboration.
 
-Viewer supports display-only Photometric Ref90, Raw, Brightness, Contrast, Gamma and Percentile
-auto-stretch in the Display panel. Display Enhancement v1 is implemented on main.
+The [Getting Started guide](docs/getting_started.md) covers a complete first session.
 
-**DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA**
+## Installation
 
-These controls do not modify the raw Cine frame. Annotation coordinates remain
-in raw image space. Scientific intensity analysis must use raw pixels.
-**Export Current Frame exports raw pixels**, not the display-enhanced preview.
-Enhanced pixels must not be used for scientific grayscale statistics, cavity
-intensity analysis or physical interpretation. Bright/dark appearance alone
-does not establish a bubble or liquid phase identity.
+Use a source checkout: runtime schemes/presets live in `configs/`. Windows with
+Python 3.12 is the tested desktop setup. The package declares Python `>=3.9`;
+that declaration does not mean the full UI was validated on 3.9.
 
-Use **R** for Raw, **P** for Photometric Ref90 and **E** for the previous enhanced mode.
-Manual offers Brightness -100 to +100, Contrast 0.25 to 4.00 and Gamma 0.20 to
-5.00. Auto contrast defaults to the 1st–99th percentiles. Reset Display restores
-Raw and all display defaults without changing the frame, zoom or annotations.
-Sessions store display settings as UI state only. No additional dependencies
-are required. See [preprocessing policy](docs/image_preprocessing_policy.md).
+```powershell
+git clone https://github.com/xiaorouqiuzi-ai/droplet--vision.git
+cd droplet--vision
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[cine,ui]"
+python -m pip check
+python -c "import sys; print(sys.executable); print(sys.version)"
+```
 
-A human-reviewed photometric preprocessing candidate preset is available at
-`configs/photometry/photometric_ref90_v1.json`; see `docs/photometric_presets.md`.
+If activation is unavailable, invoke `.venv\Scripts\python.exe` directly. In CMD,
+activate with `.venv\Scripts\activate.bat`. The actual extras in
+[pyproject.toml](pyproject.toml) are `cine` (PIMS 0.7) and `ui` (PySide6 6.10.2);
+the base interfaces have no mandatory dependencies.
 
-### Default photometric display
+**Current tested development environment (VisionLab):** Python 3.12.10,
+NumPy 2.0.2, Pillow 11.3.0, PIMS 0.7, ImageIO 2.37.2, tifffile 2024.8.30,
+PySide6 6.10.2. This records a tested environment, not a permanent dependency lock.
+OpenCV, SciPy, Torch and Ultralytics are not required by implemented workflows.
 
-The Viewer defaults to the human-reviewed `photometric_ref90_v1` display preset.
-For each Cine, a reference frame at 3% of its frame range
-(`round((frame_count - 1) * 0.03)`) is used to compute one P90-based gain.
-The same gain is locked for the full Cine; navigation never re-estimates it.
-Reference initialization runs in the background. Only reopening the Cine or
-clicking **Recalculate Reference** recomputes the gain. The Display panel shows
-reference statistics, the applied gain and QC warnings; failure falls back to Raw.
+## Working with Phantom Cine
 
-Raw pixels remain unchanged. Scientific intensity analysis always uses raw
-pixels. Users can switch to Raw display at any time; **Export Current Frame
-exports raw scientific pixels**. Manual and Auto remain independent modes.
-Parameters come from the frozen [JSON preset](configs/photometry/photometric_ref90_v1.json);
-see [preset provenance and usage](docs/photometric_presets.md). This Viewer display
-integration does not enable model preprocessing or training.
+**Cine files are read-only.** File → Open Cine loads metadata and frames
+asynchronously through `CineReader`. A bounded raw cache holds requested frames;
+the Viewer does not preload the video. Timestamp/offset metadata may be read
+on opening. The left panel preserves full raw TIME64 integers.
 
-## Organization
+Use fixed ±1/10/100/1000 jumps, the timeline or spinbox. Click an upper annotation
+triangle to revisit a frame; hover for object/state details. Dense triangles
+select the represented frame nearest the current frame. Playback offers a
+**target** rate up to 1000 FPS, limited by decoding/rendering; it is neither a
+1000-frame jump nor experimental time. See [Viewer](docs/cine_viewer.md) and
+[Cine Reader](docs/cine_reader.md).
 
-`src/droplet_vision` holds reusable interfaces and future processing modules;
-`configs` holds portable examples; `docs` holds scientific policies; `tests`
-holds small standard-library tests. `data`, `models`, `training`, `outputs`,
-`notebooks`, and `scripts` document their intended roles.
+### Scientific Timing Policy
 
-Start with [architecture](docs/architecture.md), [model strategy](docs/model_strategy.md),
-[annotation guidance](docs/annotation_guideline.md), and [timing policy](docs/timing_policy.md).
+**Scientific time comes from TIME64, not `frame_index / header_fps`.**
+Header and TIME64-derived rates may disagree. Preserve `timing_status`, including
+`TIMING_MISMATCH_UNRESOLVED`; successful reading does not resolve experimental
+timing validity. See [timing policy](docs/timing_policy.md).
 
-## Environments and checks
+### Display Pipeline
 
-VisionLab is the current Cine/UI development environment; the previous
-Python 3.9 environment is not required. Keep future GPU training/inference
-separate and exchange stable records through backend-neutral interfaces.
-Core interfaces retain Python >=3.9 compatibility and do not import Qt/PIMS.
-UI smoke tests target the tested Python 3.12 environment above.
-From the repository root in VisionLab:
+**DISPLAY TRANSFORM != SCIENTIFIC PIXELS**
 
-```console
+- **Raw:** uint8 reference values unchanged.
+- **亮度标准化（Ref90） / Photometric Normalization (Ref90):** default display;
+  one P90-based gain from the Cine's 3% reference frame, locked for the whole Cine.
+- **Manual:** independent brightness, contrast and gamma.
+- **Auto:** percentile display stretch, separate from Ref90.
+
+Cine, raw cache, annotation geometry and scientific grayscale sources stay unchanged.
+**Export Current Frame exports raw pixels**, not enhanced previews. The frozen ID
+remains [`photometric_ref90_v1`](configs/photometry/photometric_ref90_v1.json).
+See [preprocessing policy](docs/image_preprocessing_policy.md) and
+[preset provenance](docs/photometric_presets.md).
+
+## Annotation Workflow
+
+```text
+Apply Scheme → Drawing Layer → Object → Polygon / Magic Wand / Point
+→ close draft → adjust vertices → Confirm → Frame State / quality → Save
+```
+
+Polygon and Magic Wand outlines are dashed while temporary. Closing a polygon
+is not saving it: **Confirm** creates a solid persistent record. Point uses one
+click. Select edits vertices; hollow midpoint handles insert vertices. Undo/Redo
+retains record history.
+
+Approved Object IDs: `parent_droplet`, `internal_cavity_candidate`,
+`daughter_droplet`, `flame`, `support_structure`, `soot`. Names, order, colors and
+daughter numbering come from the Scheme; colors have no scientific meaning.
+Definitions belong exclusively to the [labeling scheme v1.0](docs/annotation_labeling_scheme_v1.md).
+
+One Cine normally has one **AnnotationDocument**, saved in `outputs/annotations/`.
+It stores geometry, Frame States, provenance and immutable history, not Cine pixels.
+Queue-managed documents normally live in the queue's `annotations/` directory.
+ViewerSession separately stores navigation, bookmarks and UI state. Follow the
+[10-minute walkthrough](docs/annotation_editor.md#10-minute-first-annotation-walkthrough).
+
+## Frame States and Quality
+
+Frame State is multi-label and separate from spatial Object annotation:
+`simple_evaporation`, `nucleation`, `puffing`, `micro_explosion`, `burning`,
+`boiling`, `sooting`, `secondary_breakup`, `bubble_growth`, `oscillation_deformation`.
+
+Four Scheme-selected common states are visible; **More States** stays multi-select.
+The entry workflow makes `simple_evaporation` exclusive with other states.
+`uncertain` is a **quality flag**, never a physical state. Notes expand on demand.
+Dynamic judgments need neighboring-frame evidence; Wand and sampling assign no physical labels.
+
+## Sampling and Annotation Queue
+
+Sampling v1 combines lifecycle anchors and raw-image change peaks, stable IDs
+and explicit manual progress. **A change peak is a sampling heuristic, not a
+physical event classification.**
+
+```powershell
+python scripts/build_annotation_queue.py --root "<dataset-root>" --output "outputs/annotation_queues/run/queue.json" --preview
+```
+
+Replace placeholders before running. Open the queue, set its local dataset root,
+open a pending item, annotate/save, then explicitly mark Done, Skipped or Needs
+Review. Same-Cine items reuse the reader. Reopen the saved queue to resume.
+See [sampling and queue workflow](docs/frame_sampling_queue.md).
+
+## Offline Collaboration without Sharing Multi-Terabyte Cine Data
+
+A **Portable Review Package** (`.dvrpkg`) contains selected raw PNG frames,
+optional context, annotations, Frame States, TIME64, a Scheme snapshot and checksums.
+It contains **no complete Cine** and needs no original dataset path on the reviewer's machine.
+
+```text
+Annotator → Export .dvrpkg → Reviewer: Edit / Accept / Reject
+          ← returned .dvrpkg ← Save Reviewed Package
+          → Import: Reviewed candidates → original user evaluates acceptance
+```
+
+Context defaults to ±5 frames. Available frames and targets are explicit. Edits
+create derived records; import preserves Manual and detects concurrent edits.
+Nothing automatically becomes Ground Truth or marks a queue item Done. State
+candidates import into immutable history; a dedicated comparison/adoption UI is
+planned. Follow the [annotator/reviewer instructions](docs/portable_review_package.md).
+
+## Data Architecture
+
+**Ground Truth ≠ Prediction ≠ Measurement.**
+
+```text
+Raw Cine (read-only)
+├── Human AnnotationDocument — objects, states, quality, revisions
+├── AI Prediction Store — planned model/run-specific outputs
+└── Measurement Store — planned derived scientific quantities
+```
+
+Not every saved annotation is approved Ground Truth. Queue is task progress,
+ViewerSession is UI state, and a review package is transport, not a fourth canonical
+layer. The [data architecture specification](docs/data_architecture_concept_v1.md) defines these boundaries.
+
+## Scientific Scope and Claim Boundary
+
+The research direction is visual evidence → transient states → event statistics
+→ validated measurements, rather than model mAP alone. Current software prepares
+evidence for human review; it does not claim automated physical conclusions,
+validated 3D volume, ignition timing or trained-model performance. Bright/dark
+internal appearance is not automatic proof of a bubble.
+
+### Data Safety Principles
+
+- Cine is read-only; cached raw arrays are read-only and display arrays independent.
+- Geometry stays in raw image coordinates, including Ref90 mode.
+- Scientific grayscale uses raw pixels, not UI enhancement.
+- Edits retain original human/prediction records and lineage.
+- Review preserves Manual and requires explicit conflict choices.
+- Generated outputs, Cine and model weights stay outside Git.
+
+## AI Integration Status
+
+PredictionProvider and layer/provenance interfaces are **architecture-ready**.
+No integrated YOLO/Torch training/inference, trained weights, production Prediction
+Store, dataset exporter or measurement execution pipeline is supplied. Future
+YOLO-seg/U-Net adapters must separate predictions and support human review.
+Viewer display settings must not silently become training preprocessing.
+
+## Repository Structure
+
+```text
+configs/                    Schemes, sampling and display presets
+docs/                       Guides, scientific policies and developer references
+scripts/                    Launcher, inventory/sampling tools and docs checker
+src/droplet_vision/
+    cine/                   Read-only frame and timing access
+    annotations/            Documents, schemes and annotation assistance
+    sampling/               Sampling and queue persistence
+    display/                Independent display transforms
+    ui/                     Desktop workstation
+    review_package/         Offline raw-frame transport and merge
+    inference/              Future model interface
+tests/                      Synthetic, Qt and opt-in real-data checks
+outputs/                    Local generated data (Git ignored)
+```
+
+## Documentation
+
+Start with the [Documentation Index](docs/README.md).
+
+| Document | Purpose |
+| --- | --- |
+| [Getting Started](docs/getting_started.md) | Install, launch and complete a first session |
+| [Cine Viewer](docs/cine_viewer.md) | Navigation, playback, TIME64, display, export and sessions |
+| [Annotation Editor](docs/annotation_editor.md) | Drawing, editing, State, quality and saving |
+| [Labeling Scheme v1](docs/annotation_labeling_scheme_v1.md) | Authoritative scientific label definitions |
+| [Frame Sampling Queue](docs/frame_sampling_queue.md) | Reproducible selection and resumable work |
+| [Portable Review Package](docs/portable_review_package.md) | Offline collaboration and conflicts |
+| [Data Architecture](docs/data_architecture_concept_v1.md) | Ground Truth / Prediction / Measurement |
+| [Annotation Architecture](docs/annotation_architecture.md) | Developer history and persistence contracts |
+| [Image Preprocessing Policy](docs/image_preprocessing_policy.md) | Display/model/science separation |
+| [Photometric Presets](docs/photometric_presets.md) | Frozen Ref90 candidate and provenance |
+
+## Validation
+
+From the activated environment at repository root:
+
+```powershell
+python -m pip check
+$env:QT_QPA_PLATFORM = "offscreen"
 python -m unittest discover -s tests -v
 python -m compileall src scripts
+python scripts/check_docs_links.py
+git diff --check
 ```
 
-Local paths belong in ignored local configuration, never machine-specific
-versioned settings. Raw Cine files, exported datasets, and weights stay outside
-Git; see [data policy](docs/data_policy.md).
+Tests cover raw pixels/timing, immutable history, coordinates, editor/marker
+interactions, queues, package integrity and merge conflicts. Real-data tests are
+opt-in: set `DROPLET_VISION_TEST_CINE` and/or `DROPLET_VISION_LAYOUT_TEST_CINE`
+to suitable local fixtures. Skipped real-data tests are not validation evidence.
 
-## Update summary
+## Known Limitations
 
-- UI Layout v1.2 (for review): left information/display dock, right annotation
-  tools and dynamic settings, label-to-tool guidance, clearer Ref90 display name,
-  selectable frame steps and a separate 1000 FPS review-playback option.
+- Primarily validated on available monochrome Phantom variants; other formats need validation.
+- Experimental timing mismatch needs investigation outside the UI.
+- Wand/package export require uint8 grayscale. Wand polygons approximate selections;
+  holes/degenerate contours are refused.
+- BBox remains readable/editable but is hidden from primary manual tools.
+- No mask-brush editor, tracking or automatic physical event classifier.
+- Offline review is not real-time synchronization; checksums are not signatures.
+- Runtime configs assume a source checkout; standalone wheels and other desktop
+  platforms need additional packaging/validation.
+- Annotation protection does not automatically save ViewerSession bookmarks.
 
-- Annotation UX v1.1 (for review): polygon node insertion/deletion, Chinese/English
-  catalogs, and raw-only Magic Wand previews with manual confirmation, polygon
-  correction, multi-region compound undo and recorded selection settings.
+## Roadmap
 
-- Frame Sampling + Annotation Queue v1: versioned raw
-  probing/local refinement, portable atomic queues, resumable manual statuses,
-  shared annotation documents and same-Cine frame navigation. No physical event
-  classification or model inference is performed.
-- Annotation Editor v1: added point/bbox/polygon tools,
-  selection and editing, QUndoStack commands, immutable annotation history,
-  atomic JSON documents, dirty protection, autosave and annotated-frame navigation.
-  ViewerSession, raw pixels, TIME64 and the frozen Ref90 preset remain separate.
-- Default Photometric Ref90 display: load the accepted JSON preset and estimate
-  one gain from the Cine's 3% reference frame asynchronously; preserve that gain
-  across navigation, with Raw override, reference QC and session provenance.
-  Raw pixels, PNG export, geometry and scientific timing remain unchanged.
-- Display Enhancement v1 is implemented on main: added Raw/Manual/Percentile
-  display modes with brightness, contrast and gamma controls, R/E comparison,
-  reset and session persistence. Transforms operate on independent display
-  arrays only; raw Cine pixels, frame cache, annotation coordinates, scientific
-  intensity analysis, TIME64 and raw PNG export remain unchanged. No dependencies
-  were added.
-- Initial scaffold: established object/state separation, optional measurement
-  interfaces, annotation guidance and provisional timing/validation policies.
-- Cine Reader v1 is implemented on main: read-only random frame access,
-  whitelisted metadata, bounded raw
-  TIME64 extraction, conservative timing summaries, portable CSV/JSON inventory,
-  CLI entry points and opt-in real-Cine integration tests. No image exports.
-  Local smoke testing reproduced 8146 vs approximately 4073.32 fps; the timing
-  mismatch remains unresolved. See [Cine Reader usage and limitations](docs/cine_reader.md).
-- Viewer UI v1 is implemented on main: Graphics View canvas,
-  asynchronous frame navigation, 64-frame LRU, review playback, metadata/TIME64,
-  bookmarks, portable sessions and pixel-exact PNG export. Added Qt-free open
-  taxonomy/annotation records, append-only prediction review, read-only
-  point/bbox/polygon overlays and future tool/prediction-provider interfaces.
-  Revalidated Cine Reader using VisionLab Python 3.12.10 before documenting
-  this environment. Default labels are examples, not an exhaustive taxonomy.
-- Windows desktop launch: a local shortcut can target VisionLab's `pythonw.exe`
-  with `scripts/launch_viewer.py` as its argument and the repository as its
-  working directory. This opens the viewer without a console; use File > Open
-  Cine to select a recording. Machine-specific shortcut paths stay outside Git.
-- Repository quick launch: added `launch_viewer.cmd` with portable interpreter
-  discovery and an ignored local interpreter setting; clarified that the tested
-  environment is not a permanent dependency lock. Anonymized the timing-policy
-  test filename without changing its timing observations or scientific rules.
+Current: human annotation and collaboration. Next: prediction import, dataset
+export, a YOLO-seg baseline, measurement extraction and TIME64-based temporal
+logic. These are planned capabilities without date commitments.
 
-```console
-python scripts/inspect_cine.py --input data/raw/example.cine --json outputs/inspect.json
-python scripts/build_cine_inventory.py --root data/raw --csv outputs/inventory.csv --json outputs/inventory.json
-```
+## Research Use
+
+Record source revision, Scheme/preset versions, data identity and timing status
+with results. Citation metadata will be added when a formal software release or
+publication is available; no DOI or software citation is claimed here.
+
+## Author and Repository
+
+Author / repository owner: **xiaorouqiuzi-ai**. About identifies the UI as
+**Droplet Annotation Workstation**, within the **Droplet Vision** project.
+
+[GitHub repository](https://github.com/xiaorouqiuzi-ai/droplet--vision)

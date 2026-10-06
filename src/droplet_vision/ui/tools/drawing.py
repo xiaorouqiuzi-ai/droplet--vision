@@ -67,50 +67,75 @@ class PolygonTool(EditorTool):
 
     def __init__(self, editor):
         super().__init__(editor)
-        self.points = []
+        from .draft_polygon import DraftPolygonEditor
+        self.draft = DraftPolygonEditor(editor)
+
+    @property
+    def points(self):
+        return self.draft.polygons[0]
 
     def mouse_press(self, position):
         if self.editor.can_draw(self.geometry_type):
-            point = list(position)
-            if not self.points or point != self.points[-1]:
-                self.points.append(point)
-            self.editor.preview_polygon(self.points)
+            self.draft.press(position)
 
     def mouse_move(self, position):
-        if self.points:
-            self.editor.preview_polygon(self.points + [list(position)])
+        self.draft.move(position)
+
+    def mouse_release(self, position):
+        self.draft.release(position)
 
     def mouse_double_click(self, position):
-        self.mouse_press(position)
-        self.commit()
+        # Closing is never persistence, including the legacy double-click gesture.
+        if not self.draft.closed:
+            if not self.points or list(position) != self.points[-1]:
+                self.draft.press(position)
+            self.draft.close()
 
     def commit(self):
-        points = self.points[:]
-        if len(points) > 1 and points[0] == points[-1]:
-            points.pop()
-        if len(points) < 3:
-            self.editor.message(tr("Polygon requires at least three vertices; continue or Esc to cancel."))
-            return
-        if self.editor.create_annotation(self.geometry_type, {"points": points}):
+        if not self.draft.closed:
+            self.draft.close()
+            return False
+        if self.editor.create_annotation('polygon', {'points': deepcopy(self.points)}):
             self.cancel()
+            self.editor.switch_tool('select')
+            return True
+        return False
 
     def backspace(self):
         if self.points:
-            self.points.pop()
-            self.editor.preview_polygon(self.points)
+            self.draft.delete((0, len(self.points)-1))
 
     def cancel(self):
-        self.points.clear()
+        self.draft.clear()
         super().cancel()
+
+    def deactivate(self):
+        self.cancel()
+        self.draft.dispose()
 
 
 class SelectTool(EditorTool):
     def __init__(self, editor):
         super().__init__(editor)
         self.handle = self.original = self.working = None
+        self.midpoint_press = None
 
     def mouse_press(self, position):
         handle = self.editor.handle_at(position)
+        midpoint = self.editor.midpoint_at(position) if handle is None else None
+        record = self.editor.selected_record()
+        if midpoint is not None and record is not None and self.editor.can_edit(record):
+            self.original = record
+            self.midpoint_press = list(position)
+            self.working = deepcopy(record.geometry)
+            points = self.working['points']
+            other = points[(midpoint + 1) % len(points)]
+            point = [(points[midpoint][0] + other[0]) / 2, (points[midpoint][1] + other[1]) / 2]
+            self.handle = midpoint + 1
+            points.insert(self.handle, point)
+            self.editor.selected_vertex = self.handle
+            self.editor.preview_geometry('polygon', self.working)
+            return
         if handle is None:
             selected = self.editor.selected_record()
             near_edge = (selected is not None and selected.geometry_type == 'polygon' and
@@ -129,6 +154,7 @@ class SelectTool(EditorTool):
 
     def mouse_move(self, position):
         if self.original is None:
+            self.editor.hover_midpoint(position)
             return
         kind = self.original.geometry_type
         editors = {"point": self._point, "polygon": self._polygon, "bbox": self._bbox}
@@ -150,7 +176,8 @@ class SelectTool(EditorTool):
 
     def mouse_release(self, position):
         if self.original is not None:
-            self.mouse_move(position)
+            if self.midpoint_press is None or list(position) != self.midpoint_press:
+                self.mouse_move(position)
             self.commit()
 
     def commit(self):
@@ -167,4 +194,5 @@ class SelectTool(EditorTool):
 
     def cancel(self):
         self.handle = self.original = self.working = None
+        self.midpoint_press = None
         super().cancel()

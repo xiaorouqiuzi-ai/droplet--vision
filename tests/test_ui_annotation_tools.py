@@ -64,10 +64,10 @@ class AnnotationToolsTests(unittest.TestCase):
         self.assertEqual(record.geometry, {'point': [50, 50]})
         self.assertEqual(record.label_id, 'experimental_feature_x')
         self.assertEqual(record.attributes['raw_time64'], 0)
-        self.editor.actions['bbox'].trigger()
-        self.drag((100, 110), (60, 50))
+        self.assertNotIn('bbox', self.editor.actions)
+        self.editor.create_annotation('bbox', {'bbox': [60, 50, 40, 60]})
         self.assertEqual(self.editor.document.active_records()[-1].geometry, {'bbox': [60, 50, 40, 60]})
-        self.drag((10, 10), (10, 10))
+        self.assertFalse(self.editor.create_annotation('bbox', {'bbox': [10, 10, 0, 0]}))
         self.assertEqual(len(self.editor.document.active_records()), 2)
 
     def test_polygon_cancel_backspace_enter_and_double_click(self):
@@ -77,9 +77,12 @@ class AnnotationToolsTests(unittest.TestCase):
         QTest.keyClick(self.canvas, Qt.Key.Key_Backspace)
         self.assertEqual(len(self.editor.tool.points), 2)
         self.click(80, 100)
-        QTest.keyClick(self.canvas, Qt.Key.Key_Return)
+        QTest.keyClick(self.canvas, Qt.Key.Key_Return)  # Close only.
+        self.assertFalse(self.editor.document.active_records())
+        QTest.keyClick(self.canvas, Qt.Key.Key_Return)  # Explicit confirm.
         self.assertEqual(self.editor.document.active_records()[0].geometry['points'],
                          [[20, 20], [100, 20], [80, 100]])
+        self.editor.switch_tool('polygon')
         self.click(10, 10)
         QTest.keyClick(self.canvas, Qt.Key.Key_Escape)
         self.assertEqual(self.editor.tool.points, [])
@@ -88,6 +91,8 @@ class AnnotationToolsTests(unittest.TestCase):
         self.click(120, 40)
         QTest.mouseDClick(self.canvas.viewport(), Qt.MouseButton.LeftButton,
                           pos=self.canvas.mapFromScene(QPointF(120, 120)))
+        self.assertEqual(len(self.editor.document.active_records()), 1)  # Closed draft only.
+        QTest.keyClick(self.canvas, Qt.Key.Key_Return)
         self.assertEqual(len(self.editor.document.active_records()), 2)
         self.assertEqual(len(self.editor.document.active_records()[-1].geometry['points']), 3)
 
@@ -148,6 +153,6 @@ class AnnotationToolsTests(unittest.TestCase):
         label = self.window.annotation_panel.selected_label()
         label.allowed_geometry_types = ['point']
         self.editor.update_tools()
-        self.assertFalse(self.editor.actions['bbox'].isEnabled())
+        self.assertNotIn('bbox', self.editor.actions)
         self.assertFalse(self.editor.actions['polygon'].isEnabled())
         self.assertFalse(self.editor.create_annotation('bbox', {'bbox': [1, 1, 10, 10]}))

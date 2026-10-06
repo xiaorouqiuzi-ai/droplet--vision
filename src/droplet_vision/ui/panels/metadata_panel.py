@@ -2,6 +2,7 @@
 from ..i18n import tr
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel
+from ..widgets.wrapped_label import WrappedLabel
 
 
 class MetadataPanel(QWidget):
@@ -27,23 +28,29 @@ class MetadataPanel(QWidget):
             form = QFormLayout(group)
             form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
             for key, caption in fields:
-                value = QLabel()
+                value = WrappedLabel()
+                value.setProperty('literal_text', True)
                 value.setObjectName('metadata_' + key)
                 value.setTextFormat(Qt.TextFormat.PlainText)
                 value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
-                value.setWordWrap(key in ('filename', 'timing_status'))
+                value.setWordWrap(True)
                 form.addRow(tr(caption), value)
                 self.values[key] = value
             layout.addWidget(group)
         self.clear()
 
     def clear(self):
+        self._raw_values = {}
         for value in self.values.values():
             value.setText('—')
 
     def _set(self, **values):
+        self._raw_values.update(values)
         for key, value in values.items():
             self.values[key].setText(tr('unknown') if value is None else str(value))
+
+    def retranslate(self):
+        self._set(**self._raw_values)
 
     def set_metadata(self, metadata, timing):
         self.clear()

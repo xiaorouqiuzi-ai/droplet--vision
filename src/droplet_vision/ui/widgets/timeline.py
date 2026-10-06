@@ -1,6 +1,7 @@
 from ..i18n import tr
 from PySide6.QtCore import Qt, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import QWidget, QSlider, QSpinBox, QHBoxLayout, QLabel
+from .annotation_markers import MarkedSlider
 
 
 class Timeline(QWidget):
@@ -8,7 +9,7 @@ class Timeline(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider = MarkedSlider()
         self.slider.setObjectName("frameSlider")
         self.spinbox = QSpinBox()
         self.spinbox.setObjectName("frameSpinbox")
@@ -24,7 +25,12 @@ class Timeline(QWidget):
         self.debounce.timeout.connect(lambda: self.requested.emit(self.slider.value()))
         self.slider.valueChanged.connect(self._slide)
         self.spinbox.valueChanged.connect(self._spin)
+        self.slider.marker_clicked.connect(self._marker)
         self.set_count(0)
+
+    def _marker(self, value):
+        self.set_frame(value)  # Stops a pending slider debounce; exactly one navigation request.
+        self.requested.emit(value)
 
     def _slide(self, value):
         with QSignalBlocker(self.spinbox):

@@ -13,7 +13,8 @@ Docs, configs, src and tests remain versioned.
 
 Use portable relative-path examples and ignored `*.local.*` configurations for
 machine-specific paths. Never commit absolute Windows paths or credentials.
-The application configuration loader is future work; examples specify intent.
+Annotation Scheme, display preset and sampling configuration loaders are
+implemented. A general experiment configuration system remains planned.
 
 Future dataset manifests should retain Cine/run/replicate identity, provenance,
 calibration version, annotation version, split membership, raw timestamps and

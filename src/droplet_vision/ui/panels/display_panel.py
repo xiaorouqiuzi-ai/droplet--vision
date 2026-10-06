@@ -1,10 +1,11 @@
 """Controls for a Qt-independent, immutable display-settings value."""
 from __future__ import annotations
 from ..i18n import tr
+from ..widgets.wrapped_label import WrappedLabel
 from dataclasses import replace
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-                               QSlider, QDoubleSpinBox, QPushButton)
+                               QSlider, QDoubleSpinBox, QPushButton, QCheckBox)
 from ...display import DisplaySettings, display_modes
 from ...display.photometric import MODE, PRESET_ID, REFERENCE_FRACTION
 
@@ -18,7 +19,10 @@ class DisplayPanel(QWidget):
         self.settings = DisplaySettings()
         self.previous_enhanced_mode = "manual"
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(tr("Display only — raw pixels unchanged")))
+        self.auto_fit = QCheckBox(tr('Auto Fit to View'))
+        self.auto_fit.setChecked(True)
+        layout.addWidget(self.auto_fit)
+        layout.addWidget(WrappedLabel(tr("Display only — raw pixels unchanged")))
         self.mode = QComboBox()
         self.mode.setObjectName("displayMode")
         for key, title in display_modes().items():
@@ -29,7 +33,7 @@ class DisplayPanel(QWidget):
         manual_layout.setContentsMargins(0, 0, 0, 0)
         self.value_labels = {}
         for name, minimum, maximum in (("brightness", -100, 100), ("contrast", 25, 400), ("gamma", 20, 500)):
-            label = QLabel()
+            label = WrappedLabel()
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(minimum, maximum)
             slider.setObjectName("display" + name.title())
@@ -51,7 +55,7 @@ class DisplayPanel(QWidget):
             control.setSuffix("%")
             control.setObjectName(name)
             setattr(self, name, control)
-            auto_layout.addWidget(QLabel(title))
+            auto_layout.addWidget(WrappedLabel(title))
             auto_layout.addWidget(control)
             control.valueChanged.connect(lambda value, field=name: self._percentile_changed(field, value))
         layout.addWidget(self.auto_controls)
@@ -64,7 +68,7 @@ class DisplayPanel(QWidget):
         layout.addWidget(self.advanced)
         self.advanced.hide()
         self.advanced_button.toggled.connect(self.advanced.setVisible)
-        self.photometric_info = QLabel(tr("Photometric reference: no Cine open"))
+        self.photometric_info = WrappedLabel(tr("Photometric reference: no Cine open"))
         self.photometric_info.setWordWrap(True)
         self.photometric_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         advanced_layout.addWidget(self.photometric_info)

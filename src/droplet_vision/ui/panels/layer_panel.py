@@ -39,7 +39,7 @@ class LayerPanel(QWidget):
         for index, layer in enumerate(self.layers):
             item = self.active_layer.model().item(index)
             if item is not None:
-                item.setEnabled(not layer.locked and layer.role in ("manual", "reviewed") and layer.visible)
+                item.setEnabled(not layer.locked and layer.role in ("manual", "reviewed"))
 
     def _set(self, layer, key, value):
         setattr(layer, key, value)

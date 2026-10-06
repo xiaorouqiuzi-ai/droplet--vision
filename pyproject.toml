@@ -18,4 +18,4 @@ ui = ["PySide6==6.10.2"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"droplet_vision.ui" = ["translations/*.json"]
+"droplet_vision.ui" = ["translations/*.json", "assets/icons/*.png", "assets/icons/*.ico"]

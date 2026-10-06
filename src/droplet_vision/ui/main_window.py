@@ -4,9 +4,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
-                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea, QGroupBox)
+                               QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea, QGroupBox, QToolButton)
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
 from ..annotations.taxonomy import load_taxonomy, default_taxonomy_path
+from ..annotations.display_style import record_colors
 from ..display import DisplaySettings, render_display
 from ..display.photometric import MODE, PRESET_ID, REFERENCE_FRACTION
 from .cine_controller import CineController
@@ -15,12 +16,14 @@ from .widgets.image_canvas import ImageCanvas
 from .widgets.timeline import Timeline
 from .widgets.transport_controls import TransportControls, REVIEW_PLAYBACK_FPS
 from .panels.metadata_panel import MetadataPanel
+from .panels.annotation_data_panel import AnnotationDataPanel
 from .panels.annotation_panel import AnnotationPanel
 from .panels.layer_panel import LayerPanel
 from .panels.display_panel import DisplayPanel
 from .annotation_editor import AnnotationEditor
 from .annotation_queue import QueueCoordinator
-from .i18n import tr, initialize, save_language, preferred_language
+from .i18n import tr, initialize, save_language, current_language, set_language, retranslate_tree
+from .branding import app_icon, AboutDialog
 
 
 class MainWindow(QMainWindow):
@@ -29,7 +32,9 @@ class MainWindow(QMainWindow):
     def __init__(self, taxonomy_path=None, parent=None, controller=None):
         super().__init__(parent)
         initialize()
-        self.setWindowTitle(tr("Droplet Annotation Workstation — Cine Viewer v1"))
+        self.setWindowIcon(app_icon())
+        self.about_dialog = None
+        self.setWindowTitle(tr("Droplet Annotation Workstation"))
         self.resize(1280, 850)
         self.controller = controller or CineController(self)
         self.metadata = None
@@ -49,12 +54,17 @@ class MainWindow(QMainWindow):
         self.canvas = ImageCanvas()
         layout.addWidget(self.canvas, 1)
         self.display_panel = DisplayPanel()
+        self.display_panel.auto_fit.toggled.connect(self.canvas.set_auto_fit)
+        self.canvas.auto_fit_changed.connect(self.display_panel.auto_fit.setChecked)
+        self.canvas.fitted.connect(lambda: self.statusBar().showMessage(tr('Fitted to view; resizing will fit automatically.')))
         left = QWidget()
-        left_layout = QVBoxLayout(left)
+        left_layout = self.left_layout = QVBoxLayout(left)
         left_layout.addWidget(self.metadata_panel)
+        self.annotation_data_panel = AnnotationDataPanel()
         display_group = QGroupBox(tr('Display'))
         QVBoxLayout(display_group).addWidget(self.display_panel)
         left_layout.addWidget(display_group)
+        left_layout.addWidget(self.annotation_data_panel)
         left_layout.addStretch()
         self.info_dock = self._scroll_dock(tr('Image and display'), 'imageInfoDock', left,
                                            Qt.DockWidgetArea.LeftDockWidgetArea)
@@ -101,7 +111,11 @@ class MainWindow(QMainWindow):
         self.controller.photometric_changed.connect(self._photometric_changed)
         self._menus()
         self.editor = AnnotationEditor(self, taxonomy_path or default_taxonomy_path())
+        self.left_layout.insertWidget(self.left_layout.count()-1, self.annotation_panel.records_group)
         self.queue_manager = QueueCoordinator(self)
+        from .review_package import ReviewCoordinator
+        self.review_manager = ReviewCoordinator(self)
+        self.reorder_menus()
         self.transport.setEnabled(False)
         self.statusBar().showMessage(tr("Open a Cine to begin. Display pixels are separate from scientific raw values."))
 
@@ -126,14 +140,24 @@ class MainWindow(QMainWindow):
         return action
 
     def _menus(self):
+        self.language_toggle = QToolButton(self)
+        self.language_toggle.setMinimumWidth(self.language_toggle.fontMetrics().horizontalAdvance('English') + 20)
+        self.language_toggle.setText('English' if current_language() == 'zh_CN' else '中文')
+        self.language_toggle.setToolTip(tr('Switch language'))
+        self.language_toggle.clicked.connect(lambda: self.change_language(
+            'en_US' if current_language() == 'zh_CN' else 'zh_CN'))
+        self.menuBar().setCornerWidget(self.language_toggle)
         settings = self.menuBar().addMenu(tr('Settings'))
-        language = settings.addMenu(tr('Language') + tr(' / Language'))
+        language = settings.addMenu(tr('Language'))
+        self.language_actions = {}
         for code, title in [('zh_CN', '中文'), ('en_US', 'English')]:
             action = language.addAction(title)
             action.setCheckable(True)
-            action.setChecked(code == preferred_language())
+            action.setChecked(code == current_language())
+            self.language_actions[code] = action
             action.triggered.connect(lambda checked=False, value=code: self.change_language(value))
         file_menu = self.menuBar().addMenu(tr("File"))
+        self.file_menu = file_menu
         self._action(file_menu, tr("Open Cine..."), self.open_dialog, "Ctrl+O")
         self._action(file_menu, tr("Close Cine"), self.close_cine)
         self.export_action = self._action(file_menu, tr("Export Current Frame..."), self.export_dialog, "Ctrl+E")
@@ -168,10 +192,21 @@ class MainWindow(QMainWindow):
         future = model.addAction(tr("Prediction providers — future extension"))
         future.setEnabled(False)
         help_menu = self.menuBar().addMenu(tr("Help"))
-        self._action(help_menu, tr("About"), lambda: QMessageBox.information(
-            self, tr("Annotation Editor v1"), tr("Read-only Cine input with separate annotation documents.\n"
-            "Point, bbox and polygon editing; immutable history and undo/redo.\n"
-            "Timing remains provisional. Mask editing and model inference are future work.")))
+        self._action(help_menu, tr('About'), self.show_about)
+
+    def reorder_menus(self):
+        actions = {a.text(): a for a in self.menuBar().actions()}
+        for title in ('File', 'Annotation', 'Queue', 'View', 'Model', 'Settings', 'Help'):
+            action = actions[tr(title)]
+            self.menuBar().removeAction(action)
+            self.menuBar().addAction(action)
+
+    def show_about(self):
+        if self.about_dialog is None:
+            self.about_dialog = AboutDialog(self)
+        self.about_dialog.retranslate()
+        self.about_dialog.show()
+        self.about_dialog.raise_()
 
     def open_dialog(self):
         filename, _ = QFileDialog.getOpenFileName(self, tr("Open Cine"), "", "Phantom Cine (*.cine)")
@@ -181,7 +216,42 @@ class MainWindow(QMainWindow):
     def change_language(self, language):
         try:
             save_language(language)
-            QMessageBox.information(self, tr('Language'), tr('Language saved. Restart the application to apply it to all windows.'))
+            previous = current_language()
+            set_language(language)
+            retranslate_tree(self, previous)
+            self.language_toggle.setText('English' if language == 'zh_CN' else '中文')
+            for code, action in self.language_actions.items():
+                action.setChecked(code == language)
+            if self.session is not None:
+                self.session.ui_state['language'] = language
+            self.editor.workflow.retranslate()
+            self.metadata_panel.retranslate()
+            self.editor.tool_settings.show_tool(self.editor.tool_key)
+            self.editor.tool_settings.refresh()
+            self.editor.wand_panel.tolerance_label.setText(tr('Tolerance: ') + str(self.editor.wand_panel.tolerance.value()))
+            self.editor.update_title()
+            self.editor.update_counts()
+            self.layer_panel.drawing_into.setText(tr('Drawing into: ') + self.layer_panel.active_layer.currentText())
+            self.display_panel.set_settings(self.display_panel.settings, emit=False)
+            self.display_panel.set_photometric(self.controller.photometric, self.controller.photometric_error,
+                                                cine_open=self.metadata is not None)
+            # Refresh list captions without rebuilding geometry/handles or drafts.
+            if self.current_record is not None:
+                records = [a for layer in self.layers for a in layer.annotations
+                           if a.cine_id == self.current_record.cine_id and a.frame_index == self.current_record.frame_index]
+                self.annotation_panel.set_records(records, record_colors(self.annotation_panel.display_config, records))
+                self.annotation_panel.select_record(self.editor.selected_record())
+                record = self.current_record
+                value = 'unknown' if record.timestamp_s is None else f'{record.timestamp_s:.9f} s'
+                self.time_label.setText(tr(f'Frame: {record.frame_index} / {self.metadata.frame_count - 1}    Relative timestamp: {value}    {record.timing_status.value}'))
+            for delta, button in self.transport.jump_buttons.items():
+                button.setToolTip(tr('Jump {delta} frames').format(delta=f'{delta:+d}'))
+            self.queue_manager.refresh()
+            self.review_manager.refresh()
+            if self.about_dialog is not None:
+                self.about_dialog.retranslate()
+            self.display_label.setText(tr('Display: ') + self.display_panel.mode.currentText())
+            self.statusBar().showMessage(tr('Language changed. Current editing state preserved.'))
         except OSError as error:
             self._error(str(error))
 
@@ -204,6 +274,7 @@ class MainWindow(QMainWindow):
     def open_cine(self, path, session=None):
         if not self.editor.confirm_discard():
             return False
+        self.review_manager.leave()
         self.cine_open_requested.emit(Path(path))
         self._reset()
         self.cine_path = Path(path)
@@ -216,6 +287,8 @@ class MainWindow(QMainWindow):
         return True
 
     def _opened(self, metadata, timing):
+        if hasattr(self, 'review_manager') and self.review_manager.active:
+            return
         self.metadata = metadata
         self.metadata_panel.set_metadata(metadata, timing)
         self.timeline.set_count(metadata.frame_count)
@@ -228,6 +301,9 @@ class MainWindow(QMainWindow):
                 self._error("Session identity differs from selected Cine; session was not applied")
             else:
                 self.session = pending
+                if pending.ui_state.get('language') in ('zh_CN', 'en_US'):
+                    self.change_language(pending.ui_state['language'])
+                self.canvas.set_auto_fit(pending.ui_state.get('auto_fit_to_view', True))
                 fps = pending.ui_state.get("review_playback_fps", 10)
                 if fps in REVIEW_PLAYBACK_FPS:
                     self.transport.fps.setCurrentText(str(fps))
@@ -251,12 +327,18 @@ class MainWindow(QMainWindow):
         if self.metadata is None:
             return
         index = self.controller.state.clamp(index)
+        if self.review_manager.active and (self.review_manager.cine_id, index) not in self.review_manager.provider.metadata:
+            self.controller.request_frame(index)
+            return
         cancelled = self.editor.frame_will_change()
         self.timeline.set_frame(index)
         self.statusBar().showMessage((tr("Unfinished drawing cancelled; ") if cancelled else "") + tr("Loading frame ") + str(index))
         self.controller.request_frame(index)
 
     def step(self, amount):
+        if self.review_manager.active and abs(amount) == 1:
+            self.review_manager.adjacent(1 if amount > 0 else -1)
+            return
         self.navigate(self.controller.state.frame_index + amount)
 
     def _frame_ready(self, index, image, record):
@@ -265,12 +347,15 @@ class MainWindow(QMainWindow):
         self.raw_image, self.current_record = image, record
         self.refresh_display()
         self.timeline.set_frame(index)
+        self.transport.frame_label.setText(f"{index} / {self.metadata.frame_count - 1}")
         self.metadata_panel.set_frame(record)
         value = "unknown" if record.timestamp_s is None else f"{record.timestamp_s:.9f} s"
         self.time_label.setText(tr(f"Frame: {index} / {self.metadata.frame_count - 1}    Relative timestamp: {value}    {record.timing_status.value}"))
         self.session.last_frame = index
         self.editor.frame_loaded()
         self.refresh_overlays()
+        if self.controller.photometric_error:
+            self.statusBar().showMessage(tr("PHOTOMETRIC_REFERENCE_FAILED: Photometric Ref90 unavailable; Raw display used."))
         if index == self.metadata.frame_count - 1:
             self.pause()
 
@@ -303,9 +388,11 @@ class MainWindow(QMainWindow):
     def refresh_overlays(self):
         if self.current_record is not None:
             record = self.current_record
-            self.canvas.overlays.render(self.layers, record.cine_id, record.frame_index)
-            self.annotation_panel.set_records([a for layer in self.layers for a in layer.annotations
-                                               if a.cine_id == record.cine_id and a.frame_index == record.frame_index])
+            records = [a for layer in self.layers for a in layer.annotations
+                       if a.cine_id == record.cine_id and a.frame_index == record.frame_index]
+            colors = record_colors(self.annotation_panel.display_config, records)
+            self.canvas.overlays.render(self.layers, record.cine_id, record.frame_index, colors)
+            self.annotation_panel.set_records(records, colors)
             if hasattr(self, "editor"):
                 self.editor.refresh_selection()
 
@@ -335,6 +422,7 @@ class MainWindow(QMainWindow):
     def close_cine(self):
         if not self.editor.confirm_discard():
             return False
+        self.review_manager.leave()
         self._pending_session = None
         self._reset()
         self.cine_path = None
@@ -383,7 +471,7 @@ class MainWindow(QMainWindow):
     def export_dialog(self):
         if self.current_record is None:
             return
-        name = f"{self.cine_path.stem}_frame_{self.current_record.frame_index:06d}.png"
+        name = f"{Path(self.metadata.filename).stem}_frame_{self.current_record.frame_index:06d}.png"
         output_dir = Path("outputs/viewer_frames")
         output_dir.mkdir(parents=True, exist_ok=True)
         path, _ = QFileDialog.getSaveFileName(self, tr("Export Current Frame"), str(output_dir / name), "PNG (*.png)")
@@ -398,7 +486,9 @@ class MainWindow(QMainWindow):
         if self.session is None:
             raise ValueError("No Cine session")
         self.session.ui_state.update(review_playback_fps=self.controller.state.playback_fps,
-                                     display=self.display_panel.settings.to_dict())
+                                     language=current_language(),
+                                     display=self.display_panel.settings.to_dict(),
+                                     auto_fit_to_view=self.canvas.auto_fit_enabled)
         self.session.ui_state["photometric"] = (
             self.controller.photometric.to_dict() if self.controller.photometric is not None else {
                 "preset_id": PRESET_ID, "reference_fraction": REFERENCE_FRACTION,
@@ -407,7 +497,7 @@ class MainWindow(QMainWindow):
         self.session.save(path)
 
     def save_session_dialog(self):
-        if self.session is None:
+        if self.session is None or self.review_manager.active:
             return
         output_dir = Path("outputs/viewer_sessions")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -434,6 +524,10 @@ class MainWindow(QMainWindow):
             self._error(str(error))
 
     def closeEvent(self, event):
+        if hasattr(self, 'review_manager') and self.review_manager.task is not None:
+            self.statusBar().showMessage(tr('Wait for review package export to finish.'))
+            event.ignore()
+            return
         if not self.editor.confirm_discard():
             event.ignore()
             return

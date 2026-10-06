@@ -2,12 +2,14 @@
 
 Droplet Annotation Labeling Scheme v1.0
 
+整体数据存储和 AI/Human 数据流设计见 [数据架构构想 v1.0](data_architecture_concept_v1.md)；本文件仍是标注类别及操作性定义的唯一依据。
+
 - Version: 1.0
 - Status: Approved baseline
 - Scope: Object annotation + frame-level phenomenon/state annotation + quality flag
 - Event onset annotation: Not included in v1.0
 
-本文件是正式标注内容的 single source of truth，定义 Droplet Annotation Scheme v1.0。它记录已经确认的标注方案，不表示所有相关软件功能已经实现。本轮规范不修改 taxonomy JSON、annotation JSON schema 或 UI；Frame State、质量标记和可选实例名称的后续软件支持应以本规范为依据。
+本文件是正式标注内容的 single source of truth，定义 Droplet Annotation Scheme v1.0。软件操作与当前实现范围见 [Annotation Editor](annotation_editor.md)；配置、UI 和后续模型均应引用本规范，不另行定义标签语义。事件 onset 不属于 v1.0 人工标注范围。
 
 ## 1. 总体原则：两层标注 + 独立质量标记
 
@@ -87,7 +89,7 @@ Frame State 作用于整个当前 frame，不具有 polygon geometry，支持多
 |---|---|---|
 | `simple_evaporation` | 单纯 / 稳定蒸发 | 核心现象 |
 | `nucleation` | 成核（Nucleation） | 核心现象 |
-| `puffing` | Puffing | 核心现象 |
+| `puffing` | 喷发（Puffing） | 核心现象 |
 | `micro_explosion` | 微爆（Micro-explosion） | 核心现象 |
 | `burning` | 燃烧（Burning） | 核心现象 |
 | `boiling` | 沸腾（Boiling） | 核心现象 |
@@ -110,7 +112,7 @@ v1 使用 `simple_evaporation` 表达没有明显 nucleation、puffing、micro-e
 
 可以同时存在 Object `internal_cavity_candidate` 与 State `nucleation`；前者描述结构，后者记录对形成现象的人工判断。
 
-### `puffing` — Puffing
+### `puffing` — 喷发（Puffing）
 
 内部气泡或压力局部释放，造成局部喷射或少量物质／子液滴脱离，但父液滴主体仍基本保留。
 
@@ -174,7 +176,7 @@ Quality:
 uncertain = true
 ```
 
-未来 UI 建议如下，仅为规范建议，不表示本轮新增软件功能：
+质量标记的界面表达如下；当前操作方式见 [Editor](annotation_editor.md)：
 
 ```text
 判定质量
@@ -292,7 +294,7 @@ States:
 
 ## 8. Instance Naming
 
-未来 Object annotation 支持可选 `instance_name`，例如：
+Object annotation 使用可选 `instance_name`，例如：
 
 ```text
 Parent_01
@@ -312,9 +314,16 @@ Soot_01
 | `annotation_id` | 系统唯一记录 ID |
 | `instance_name` | 人工可读、可选实例名称 |
 
-`instance_name` 不应成为强制字段；本规范不要求本轮修改现有 schema。
+`instance_name` 不应成为强制字段；具体存储与兼容性见 [Annotation architecture](annotation_architecture.md)。
 
 ## 9. Display / raw policy
+
+### Display configuration
+
+对象显示顺序、六色显示配色（display revision 2）、daughter 实例循环色、状态显示名及常用状态由
+Annotation Scheme 的 `display` 节点配置。它是可独立修订的运行时显示配置，
+不是科研运行日志；颜色不具有科学含义，也不是 Ground Truth geometry 字段。
+Display revision 不改变本文件定义的 stable IDs、操作性判据或语义版本。
 
 Raw、Photometric Normalization (Ref90)、Manual、Auto 都只是显示方式。
 
@@ -443,3 +452,5 @@ FRAME
 10. 空间标注始终使用 raw image coordinates。
 11. Ref90 只用于显示，不改变 Ground Truth。
 12. Event onset 暂不人工标记，未来从时序结果 + TIME64 推导。
+
+子液滴颜色循环与圆圈编号仅为 UI 显示元数据，不写入 Ground Truth；对象和状态的双语显示名来自 Scheme display 配置。版本 1.0 的 stable IDs 与科学语义保持不变。

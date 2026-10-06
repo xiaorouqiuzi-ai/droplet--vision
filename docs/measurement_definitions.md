@@ -1,5 +1,9 @@
 # Two-dimensional visual measurements
 
+Status: **Planned measurement definitions**. The Viewer does not compute these
+quantities. Derived results belong to the separate Measurement layer in the
+[data architecture](data_architecture_concept_v1.md), not annotation geometry.
+
 These are projected image measurements. `_area_px` fields store square pixels;
 perimeter, equivalent diameter and shell proxy fields store pixels. Physical
 unit conversion requires recorded pixel/mm calibration and its uncertainty.

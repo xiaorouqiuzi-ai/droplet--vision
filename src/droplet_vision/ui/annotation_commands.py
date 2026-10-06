@@ -3,6 +3,26 @@ from .i18n import tr
 from PySide6.QtGui import QUndoCommand
 
 
+class SetFrameStateCommand(QUndoCommand):
+    def __init__(self, document, record, changed=lambda: None):
+        super().__init__(tr('Set frame state'))
+        self.document, self.record, self.changed = document, record, changed
+        previous = document.frame_state(record.frame_index)
+        self.previous_id = previous.record_id if previous else None
+        self.added = False
+
+    def redo(self):
+        if not self.added:
+            self.document.add_frame_state(self.record)
+            self.added = True
+        self.document.activate_frame_state(self.record.frame_index, self.record.record_id)
+        self.changed()
+
+    def undo(self):
+        self.document.activate_frame_state(self.record.frame_index, self.previous_id)
+        self.changed()
+
+
 class AddAnnotationCommand(QUndoCommand):
     def __init__(self, document, record, layer_id="manual", changed=lambda: None):
         super().__init__(tr("Add ") + record.geometry_type)

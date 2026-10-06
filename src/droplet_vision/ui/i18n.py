@@ -1,7 +1,7 @@
 """Central UI catalog. Stable IDs/data never pass through this layer.
 
-Language preferences use local QSettings; switching is persisted immediately,
-with a restart notice so partially edited documents are never rebuilt/discarded.
+Language preferences use local QSettings; captions update in place without
+rebuilding controls or touching user-entered text and annotation state.
 English source phrases also serve as fallback keys. Composite diagnostic text
 translates known phrases with word boundaries, leaving IDs/numbers intact.
 """
@@ -23,6 +23,10 @@ _qt_translator = None
 
 def preferences():
     return QSettings('DropletVision', 'AnnotationWorkstation')
+
+
+def current_language():
+    return _language
 
 
 def preferred_language(store=None):
@@ -71,3 +75,41 @@ def initialize():
     if app is not None and _qt_translator is None:
         _qt_translator = CatalogTranslator(app)
         app.installTranslator(_qt_translator)
+
+
+def retranslate_tree(root, previous_language):
+    """Refresh exact catalog captions in place, never editor values or item IDs.
+
+    Dynamic/Scheme text is refreshed by its owning presenter afterwards. Exact
+    matching avoids translating fragments of paths, user notes or stable IDs.
+    All combo signals are blocked so changing a caption cannot select a tool.
+    """
+    from PySide6.QtCore import QObject, QSignalBlocker
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import (QLabel, QAbstractButton, QGroupBox, QMenu,
+        QDockWidget, QComboBox, QLineEdit, QTextEdit)
+    from .widgets.wrapped_label import WrappedLabel
+    sources = {value: key for key, value in _catalogs[previous_language].items()}
+    def translated(value):
+        key = sources.get(value)
+        return tr(key) if key is not None else value
+    for obj in [root] + root.findChildren(QObject):
+        if not isinstance(obj, (QLabel, QAbstractButton, QAction, WrappedLabel, QGroupBox,
+                                QMenu, QDockWidget, QComboBox, QLineEdit, QTextEdit)):
+            continue  # QTextDocument frames can be replaced when captions change.
+        with QSignalBlocker(obj):
+            if isinstance(obj, (QLabel, QAbstractButton, QAction, WrappedLabel)):
+                if not obj.property('literal_text'):
+                    obj.setText(translated(obj.text()))
+            if isinstance(obj, (QGroupBox, QMenu)):
+                obj.setTitle(translated(obj.title()))
+            if isinstance(obj, QDockWidget):
+                obj.setWindowTitle(translated(obj.windowTitle()))
+            if isinstance(obj, QComboBox):
+                for index in range(obj.count()):
+                    obj.setItemText(index, translated(obj.itemText(index)))
+            if isinstance(obj, (QLineEdit, QTextEdit)):
+                obj.setPlaceholderText(translated(obj.placeholderText()))
+            for name in ('toolTip', 'statusTip'):
+                if hasattr(obj, name):
+                    getattr(obj, 'set' + name[0].upper() + name[1:])(translated(getattr(obj, name)()))

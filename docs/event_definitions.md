@@ -2,6 +2,11 @@
 
 **PROVISIONAL — requires final experimental-author validation.**
 
+Status: **Planned event-analysis definitions**, not implemented event detection.
+These onset concepts are not additional manual Frame State IDs. The approved
+[labeling scheme](annotation_labeling_scheme_v1.md) is the sole v1.0 label
+registry; ignition onset is explicitly excluded from it.
+
 All definitions below carry this status; no numerical thresholds are fixed.
 
 | Event | Provisional definition |
@@ -14,5 +19,9 @@ All definitions below carry this status; no numerical thresholds are fixed.
 Use time-series evidence, retain frame indices/raw timestamps and record
 uncertain onset intervals. Event thresholds, persistence rules and the
 start/lifetime endpoint conventions require experimental-author validation.
-Use UNCERTAIN when evidence does not distinguish events. Neither model class
+Use the independent `uncertain` quality flag and notes when evidence does not
+distinguish phenomena; do not introduce an UNCERTAIN physical state. Neither model class
 nor confidence alone establishes a physical event.
+
+Scientific event times must come from TIME64, retaining its timing status;
+frame index divided by header FPS is not a scientific timing substitute.

@@ -1,5 +1,10 @@
 # Model strategy
 
+Status: **Planned**. No trained model, YOLO runtime integration or inference
+pipeline is supplied. Manual object/state definitions come from the
+[approved labeling scheme](annotation_labeling_scheme_v1.md); future model
+outputs belong to the [Prediction layer](data_architecture_concept_v1.md).
+
 Models follow objects/tasks; analyzers follow physical processes.
 
 | Family | Task | Initial strategy |
@@ -26,7 +31,7 @@ Each future registry entry must provide these keys:
 | model_id | Stable unique model identifier |
 | task | Segmentation task, e.g. instance_segmentation |
 | object_type | Spatial object label from the object vocabulary |
-| applicable_states | List of supported DropletState names; not event predictions |
+| applicable_states | Approved Frame State stable IDs describing intended applicability; not event predictions |
 | architecture | Actual model architecture or classical method |
 | dataset_version | Versioned training/validation dataset reference |
 | training_run | Training provenance; null for untrained/classical entries |

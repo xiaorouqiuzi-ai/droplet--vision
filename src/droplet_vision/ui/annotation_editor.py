@@ -1,12 +1,13 @@
 """Annotation document/UI coordinator; pixel display and Cine I/O remain separate."""
 from __future__ import annotations
-from .i18n import tr
+from .i18n import tr, current_language
+from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainterPath, QPen, QUndoStack
-from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QLabel, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QGroupBox, QToolButton
+from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QLabel, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QToolButton
 
 from ..annotations import AnnotationDocument, AnnotationRecord
 from ..annotations.geometry import nearest_polygon_segment
@@ -26,18 +27,21 @@ class AnnotationEditor(QObject):
         super().__init__(window)
         self.window, self.canvas = window, window.canvas
         self.document = None
+        window.timeline.slider.marker_details = self.marker_details
         self.path = None
         self.ready = False
         self.selected_id = None
         self.selected_vertex = None
         self.preview = []
         self.handles = []
+        self.midpoints = []
         self.taxonomy_metadata = {"reference": Path(taxonomy_path).name,
                                   "labels": [asdict(label) for label in window.annotation_panel.taxonomy.values()]}
         self.undo_stack = QUndoStack(self)
         self.registry = ToolRegistry()
         self.wand_panel = MagicWandPanel()
         self.wand_panel.changed.connect(lambda: self.tool.recalculate() if isinstance(self.tool, MagicWandTool) else None)
+        self.wand_panel.mode.currentIndexChanged.connect(lambda: self.tool.mode_changed() if isinstance(self.tool, MagicWandTool) else None)
         self.wand_panel.confirm_requested.connect(lambda: self.tool.commit() if isinstance(self.tool, MagicWandTool) else None)
         self.wand_panel.cancel_requested.connect(self.cancel)
         self.actions = {}
@@ -45,13 +49,15 @@ class AnnotationEditor(QObject):
         self.tool_key = 'select'
         self.tool_group = QGroupBox(tr('Annotation tools'))
         self.tool_buttons = {}
-        tool_layout = QGridLayout(self.tool_group)
+        tool_layout = QHBoxLayout(self.tool_group)
+        tool_layout.setSpacing(2)
+        tool_layout.setContentsMargins(4,4,4,4)
         window.annotation_panel.tool_host.layout().addWidget(self.tool_group)
         self.action_group = QActionGroup(self)
         self.action_group.setExclusive(True)
         for key, title, shortcut, cls in (("select", tr("Select"), "1", SelectTool),
                                           ("point", tr("Point"), "2", PointTool),
-                                          ("bbox", tr("BBox"), "3", BBoxTool),
+
                                           ("polygon", tr("Polygon"), "4", PolygonTool),
                                           ("magic_wand", tr("Wand"), "5", MagicWandTool)):
             self.registry.register(key, lambda tool_class=cls: tool_class(self))
@@ -67,8 +73,8 @@ class AnnotationEditor(QObject):
             button.setToolTip(title)
             button.setMinimumHeight(30)
             button.setStyleSheet('QToolButton:checked { border: 2px solid #3a8dde; background: #244b70; color: white; font-weight: bold; }')
-            order = ('select', 'polygon', 'magic_wand', 'bbox', 'point').index(key)
-            tool_layout.addWidget(button, order // 3, order % 3)
+            order = ('select', 'polygon', 'magic_wand', 'point').index(key)
+            tool_layout.insertWidget(min(order, tool_layout.count()), button)
             self.tool_buttons[key] = button
             self.action_group.addAction(action)
             self.actions[key] = action
@@ -87,8 +93,10 @@ class AnnotationEditor(QObject):
         open_annotations.setToolTip(tr("Open annotation JSON (Ctrl+Shift+O or Ctrl+Alt+O)"))
         window._action(menu, tr("Save Annotations"), self.save_dialog, "Ctrl+Shift+S")
         window._action(menu, tr("Save Annotations As..."), lambda: self.save_dialog(save_as=True))
-        undo = self.undo_stack.createUndoAction(self, tr("Undo"))
-        redo = self.undo_stack.createRedoAction(self, tr("Redo"))
+        undo = QAction(tr("Undo"), self)
+        redo = QAction(tr("Redo"), self)
+        undo.triggered.connect(self.undo)
+        redo.triggered.connect(self.redo)
         undo.setShortcut(QKeySequence("Ctrl+Z"))
         redo.setShortcuts([QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")])
         menu.addAction(undo)
@@ -109,6 +117,8 @@ class AnnotationEditor(QObject):
         self.autosave_timer.setInterval(30000)
         self.autosave_timer.timeout.connect(self.autosave)
         self.autosave_timer.start()
+        from .panels.workflow_panel import WorkflowPanel
+        self.workflow = WorkflowPanel(self)
         self.update_tools()
 
     def message(self, text):
@@ -122,7 +132,7 @@ class AnnotationEditor(QObject):
         label = self.window.annotation_panel.selected_label()
         layer = self.drawing_layer()
         return bool(self.ready and self.document is not None and label and label.enabled
-                    and kind in label.allowed_geometry_types and layer and layer.visible
+                    and kind in label.allowed_geometry_types and layer
                     and not layer.locked and layer.role in ("manual", "reviewed"))
 
     def update_tools(self):
@@ -134,12 +144,14 @@ class AnnotationEditor(QObject):
             self.switch_tool("select")
 
     def label_changed(self):
+        if hasattr(self, "workflow"):
+            self.workflow.instance_name.clear()
         self.cancel()
         self.update_tools()
         label = self.window.annotation_panel.selected_label()
         if label is None:
             return
-        candidates = [self.last_tools.get(label.label_id), 'polygon', 'magic_wand', 'bbox', 'point']
+        candidates = [self.last_tools.get(label.label_id), 'polygon', 'magic_wand', 'point']
         key = next((key for key in candidates if key in self.actions and self.actions[key].isEnabled()), None)
         if key is not None:
             self.switch_tool(key)
@@ -167,26 +179,32 @@ class AnnotationEditor(QObject):
         self.refresh_selection()
         if label is not None:
             self.message(tr('Current label: {label} · Tool: {tool}. {hint}').format(
-                label=tr(label.display_name), tool=self.actions[key].text(), hint=tr(self.tool_settings.HINTS[key])))
+                label=self.window.annotation_panel.label_name(label), tool=self.actions[key].text(), hint=tr(self.tool_settings.HINTS[key])))
 
     def reset(self):
         self.cancel()
         self.ready = False
         self.document = self.path = self.selected_id = None
+        if hasattr(self, "workflow"):
+            self.workflow.notes_pending = False
+            self.workflow.refresh()
         self.selected_vertex = None
         self.clear_handles()
         self.window.annotation_panel.select_record(None)
         self.undo_stack.clear()
+        self.window.timeline.slider.set_markers(set())
         self.update_tools()
         self.update_title()
         self.frame_count_label.setText(tr("Annotated: 0 | Annotated frames: 0"))
 
     def frame_will_change(self):
+        self.workflow.flush_notes()
         cancelled = bool(self.preview)
         self.cancel()
         self.select(None)
         self.ready = False
         self.update_tools()
+        self.workflow.refresh()
         return cancelled
 
     def frame_loaded(self):
@@ -196,6 +214,7 @@ class AnnotationEditor(QObject):
             self._create_document()
         self.update_tools()
         self.update_counts()
+        self.workflow.refresh()
         if new_document and self.window.annotation_panel.selected_label() is not None:
             self.label_changed()
 
@@ -204,11 +223,15 @@ class AnnotationEditor(QObject):
         self.document = AnnotationDocument(record.cine_id, metadata.filename, metadata.file_size_bytes,
                                            metadata.frame_count, metadata.width, metadata.height,
                                            self.taxonomy_metadata)
+        self.document.scheme = deepcopy(self.workflow.scheme)
         self.path = None
         self.undo_stack.clear()
         self.changed()
 
     def new_document(self):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            self.message(tr('Package snapshots cannot be replaced with a new annotation document.'))
+            return
         if self.ready and self.confirm_discard():
             self.cancel()
             self._create_document()
@@ -223,6 +246,8 @@ class AnnotationEditor(QObject):
             return False
         layer_id = self.document.record_layers[record.annotation_id]
         layer = next((item for item in self.window.layers if item.layer_id == layer_id), None)
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            return bool(layer and layer.visible and record.source != 'model' and record.frame_index == self.window.current_record.frame_index)
         return bool(layer and layer.visible and not layer.locked and
                     record.frame_index == self.window.current_record.frame_index)
 
@@ -241,6 +266,9 @@ class AnnotationEditor(QObject):
                                               "relative_timestamp_s": frame.timestamp_s,
                                               "display_mode_used": self.window.display_panel.settings.mode})
         record.attributes.update(attributes or {})
+        record.attributes["instance_name"] = self.workflow.instance_name.text().strip()
+        if hasattr(self.window, 'review_manager'):
+            self.window.review_manager.prepare_record(record)
         try:
             self.document.validate_record(record)
         except ValueError as error:
@@ -270,7 +298,7 @@ class AnnotationEditor(QObject):
             self.undo_stack.endMacro()
         return True
 
-    def edit_annotation(self, annotation_id, geometry):
+    def edit_annotation(self, annotation_id, geometry, attributes=None):
         original = self.document.records.get(annotation_id)
         if not self.can_edit(original):
             self.message(tr("This annotation layer is locked or unavailable for editing."))
@@ -284,8 +312,13 @@ class AnnotationEditor(QObject):
         except ValueError as error:
             self.message(str(error))
             return False
+        derived.attributes.update(attributes or {})
         derived.attributes["display_mode_used"] = self.window.display_panel.settings.mode
+        if hasattr(self.window, 'review_manager'):
+            self.window.review_manager.prepare_record(derived)
         layer_id = "reviewed" if original.source == "model" else self.document.record_layers[annotation_id]
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            layer_id = 'reviewed'
         target = next((layer for layer in self.window.layers if layer.layer_id == layer_id), None)
         if target is None or target.locked:
             self.message(tr("Derivative target layer is locked."))
@@ -295,15 +328,31 @@ class AnnotationEditor(QObject):
         return True
 
     def deactivate_selected(self):
+        draft = getattr(self.tool, "draft", None)
+        if draft is not None and draft.active:
+            draft.delete()
+            return
         if self.selected_vertex is not None:
             self.delete_vertex()
             return
         record = self.selected_record()
         if record is not None and self.can_edit(record):
+            if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+                self.window.review_manager.decide('object', 'rejected')
+                return
             self.cancel()
             self.undo_stack.push(DeactivateAnnotationCommand(self.document, record.annotation_id, self.changed))
 
+    def rename_selected(self, name):
+        record = self.selected_record()
+        if record is None or name.strip() == record.attributes.get('instance_name', ''):
+            return False
+        return self.edit_annotation(record.annotation_id, record.geometry, {'instance_name': name.strip()})
+
     def changed(self):
+        review = getattr(self.window, 'review_manager', None)
+        if review is not None:
+            review.document_changed()
         if self.document is not None:
             for layer in self.window.layers:
                 layer.annotations = [record for record in self.document.active_records()
@@ -311,15 +360,45 @@ class AnnotationEditor(QObject):
         self.window.refresh_overlays()
         self.update_counts()
         self.update_title()
+        if hasattr(self, "workflow"):
+            self.workflow.refresh()
 
     def update_counts(self):
+        from .widgets.annotation_markers import human_frames
+        self.window.timeline.slider.set_markers(human_frames(self.document, self.window.layers))
         if self.document is not None and self.window.current_record is not None:
             count = len(self.document.active_records(self.window.current_record.frame_index))
-            self.frame_count_label.setText(tr(f"Annotated: {count} | Annotated frames: {len(self.document.annotated_frames())}"))
+            self.frame_count_label.setText(tr(f"Annotated: {count} | Annotated frames: {len(human_frames(self.document, self.window.layers))}"))
+
+    def marker_details(self, frame):
+        from .widgets.annotation_markers import human_objects, human_state
+        if self.document is None:
+            return []
+        lines = [tr('Objects: {count}').format(count=len(human_objects(self.document,self.window.layers,frame)))]
+        state = self.document.frame_state(frame)
+        if human_state(state):
+            rows = {r['state_id']:r for r in self.workflow.scheme['frame_states']['states']}
+            names = [self.workflow.state_name(rows[key]) if key in rows else key for key in state.state_ids]
+            if names:
+                lines.append(tr('States: {states}').format(states=', '.join(names)))
+        return lines
 
     def update_title(self):
-        self.window.setWindowTitle(tr("Droplet Annotation Workstation — Annotation Editor v1") +
-                                   (" *" if self.document is not None and self.document.dirty else ""))
+        self.window.annotation_data_panel.update_document(
+            self.document, self.path, self.default_path() if self.document is not None else None,
+            hasattr(self, 'workflow') and self.workflow.notes_pending)
+        self.window.setWindowTitle(tr("Droplet Annotation Workstation") +
+                                   (" *" if self.document is not None and (self.document.dirty or
+                                    (hasattr(self, "workflow") and self.workflow.notes_pending)) else ""))
+        review = getattr(self.window, 'review_manager', None)
+        if review is not None and review.active:
+            self.window.annotation_data_panel.update_document(
+                None, review.package.path, None, review.package.dirty or self.workflow.notes_pending)
+            self.window.annotation_data_panel.status.setText(tr('Unsaved changes' if review.package.dirty
+                                                               or self.workflow.notes_pending else 'Saved'))
+            self.window.annotation_data_panel.copy_button.setToolTip(tr('Copy Path'))
+            self.window.setWindowTitle(tr('Droplet Annotation Workstation') + ' — [' + tr('Portable Review Mode') + ']'
+                                       + (' *' if review.package.dirty or self.workflow.notes_pending else ''))
 
     def select(self, annotation_id):
         self.selected_vertex = None
@@ -341,18 +420,30 @@ class AnnotationEditor(QObject):
             self.selected_vertex = None
         self.canvas.overlays.highlight(self.selected_id)
         self.window.annotation_panel.select_record(record)
+        if hasattr(self, 'workflow') and record is not None:
+            self.workflow.instance_name.setText(record.attributes.get('instance_name', ''))
         self.tool_settings.refresh()
         if record is None or not self.can_edit(record) or self.tool is None or self.tool.geometry_type is not None:
             return
         for index, point in enumerate(self.geometry_handles(record.geometry_type, record.geometry)):
             pen = QPen(QColor("#ffcc33"), 1)
             pen.setCosmetic(True)
-            item = self.canvas.scene().addEllipse(-5, -5, 10, 10, pen,
+            item = self.canvas.scene().addRect(-4, -4, 8, 8, pen,
                                                   QColor("#ff5500" if index == self.selected_vertex else "#ffffff"))
             item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
             item.setPos(*point)
             item.setZValue(30)
             self.handles.append((index, point, item))
+        if record.geometry_type == 'polygon':
+            points = record.geometry['points']
+            for index, point in enumerate(points):
+                other = points[(index + 1) % len(points)]
+                midpoint = [(point[0] + other[0]) / 2, (point[1] + other[1]) / 2]
+                item = self.canvas.scene().addRect(-3, -3, 6, 6, pen)
+                item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+                item.setPos(*midpoint)
+                item.setZValue(29)
+                self.midpoints.append((index, midpoint, item))
 
     def insert_vertex(self, position):
         record = self.selected_record()
@@ -396,6 +487,18 @@ class AnnotationEditor(QObject):
                 return index
         return None
 
+    def midpoint_at(self, position):
+        cursor = self.canvas.mapFromScene(QPointF(*position))
+        candidates = [(index, (cursor - self.canvas.mapFromScene(QPointF(*point))).manhattanLength())
+                      for index, point, _ in self.midpoints]
+        nearest = min(candidates, key=lambda pair: pair[1], default=(None, 100))
+        return nearest[0] if nearest[1] <= 8 else None
+
+    def hover_midpoint(self, position):
+        hovered = self.midpoint_at(position)
+        for index, _, item in self.midpoints:
+            item.setBrush(QColor('#ffee88') if index == hovered else Qt.BrushStyle.NoBrush)
+
     def annotation_at(self, position):
         point = QPointF(*position)
         for item in self.canvas.scene().items(point):
@@ -407,6 +510,9 @@ class AnnotationEditor(QObject):
         for _, _, item in self.handles:
             self.canvas.scene().removeItem(item)
         self.handles.clear()
+        for _, _, item in self.midpoints:
+            self.canvas.scene().removeItem(item)
+        self.midpoints.clear()
 
     def clear_preview(self):
         for item in self.preview:
@@ -437,6 +543,20 @@ class AnnotationEditor(QObject):
         item.setZValue(25)
         self.preview.append(item)
 
+    def undo(self):
+        draft = getattr(self.tool, "draft", None)
+        if draft is not None and (draft.active or draft.history or draft.future):
+            draft.undo()
+        else:
+            self.undo_stack.undo()
+
+    def redo(self):
+        draft = getattr(self.tool, "draft", None)
+        if draft is not None and (draft.active or draft.history or draft.future):
+            draft.redo()
+        else:
+            self.undo_stack.redo()
+
     def cancel(self):
         had_preview = bool(self.preview)
         if self.tool is not None:
@@ -463,6 +583,9 @@ class AnnotationEditor(QObject):
         return Path("outputs/annotations") / (Path(self.document.cine_filename).stem + ".annotations.json")
 
     def save(self, path):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            raise ValueError('Use Save Reviewed Package As in portable review mode')
+        self.workflow.flush_notes()
         if self.document is None:
             raise ValueError("No annotation document")
         queue = getattr(self.window, "queue_manager", None)
@@ -476,6 +599,8 @@ class AnnotationEditor(QObject):
         self.saved.emit(Path(path))
 
     def save_dialog(self, checked=False, save_as=False):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            return self.window.review_manager.save_dialog()
         if self.document is None:
             return False
         path = self.path
@@ -495,6 +620,9 @@ class AnnotationEditor(QObject):
             return False
 
     def confirm_discard(self):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            return self.window.review_manager.confirm_discard()
+        self.workflow.flush_notes()
         if self.document is None or not self.document.dirty:
             return True
         self.window.pause()
@@ -507,6 +635,8 @@ class AnnotationEditor(QObject):
         return answer == QMessageBox.StandardButton.Discard
 
     def load(self, path):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            raise ValueError('Package snapshots cannot be replaced by annotation JSON')
         if not self.ready:
             raise ValueError("Open a Cine and wait for a frame before loading annotations")
         document = AnnotationDocument.load(path)
@@ -520,6 +650,16 @@ class AnnotationEditor(QObject):
             return False
         self.cancel()
         self.document, self.path = document, Path(path)
+        self.workflow.notes_pending = False
+        if document.scheme:
+            from copy import deepcopy
+            self.workflow.scheme = deepcopy(document.scheme)
+            self.workflow.scheme_selector.addItem(document.scheme['display_name'][current_language()], document.scheme)
+            self.workflow.scheme_selector.setCurrentIndex(self.workflow.scheme_selector.count()-1)
+            from ..annotations.schema import AnnotationLabel
+            self.window.annotation_panel.replace_labels([AnnotationLabel(**row) for row in document.scheme['objects']['labels']])
+            self.workflow.configure_display()
+            self.workflow._build_states()
         self.selected_id = None
         self.undo_stack.clear()
         self.changed()
@@ -536,6 +676,13 @@ class AnnotationEditor(QObject):
                 self.window._error(str(error))
 
     def autosave(self):
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            try:
+                self.window.review_manager.autosave()
+            except Exception as error:
+                self.message(str(error))
+            return
+        self.workflow.flush_notes()
         if self.document is None or not self.document.dirty:
             return
         # Stable document UUID prevents two Cine files with the same stem overwriting recovery data.

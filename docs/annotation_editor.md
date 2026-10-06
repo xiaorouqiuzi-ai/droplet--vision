@@ -1,185 +1,201 @@
-# Annotation Editor v1 / Annotation UX v1.1
+# Annotation Editor
 
-正式标注类别、Frame State 和质量标记定义见 [Droplet Vision 标注内容方案 v1.0](annotation_labeling_scheme_v1.md)，该文件为标注内容规范的唯一依据。
+Implemented workflow for Object annotation and Frame State. Scientific label
+meanings are defined only in the [labeling scheme](annotation_labeling_scheme_v1.md);
+data organization is defined in [Data Architecture](data_architecture_concept_v1.md).
+For installation use [Getting Started](getting_started.md).
 
-Editor v1 and UX v1.1 are on main. Layout v1.2 is in the working tree for review.
-Launch with `launch_viewer.cmd` or `python scripts/launch_viewer.py` in VisionLab.
-No new dependencies are required. Raw Cine input remains read-only.
+## 10-minute first annotation walkthrough
 
-## Drawing and editing
+1. Open a Cine and wait for a frame. Keep Auto Fit on initially; use Raw/Ref90
+   comparison to inspect visible structure without changing coordinates.
+2. In the left **Annotation Scheme** group select the approved scheme and **Apply**.
+3. On the right choose the unlocked **Manual** drawing layer.
+4. Choose **Parent droplet / 父液滴**. The first compatible tool is Polygon;
+   later selections may recall the label's last compatible tool.
+5. Click several boundary vertices. Click the first vertex, double-click or
+   press Enter to close. **Dashed means draft**, even after closing.
+6. Drag solid vertex handles; click/drag a hollow midpoint to insert a vertex.
+7. **Confirm / Enter** creates a solid record. Esc before confirmation discards
+   the draft. Point annotations instead commit on a single click.
+8. Inspect nearby frames before selecting a temporal Frame State. Use More States
+   for multiple additional states. Add Uncertain/Notes where appropriate.
+9. Save with **Ctrl+Shift+S**. Verify the file path on the left. Click the upper
+   timeline triangle to revisit this frame.
+10. Reopen the same Cine and load that JSON with **Ctrl+Shift+O**. Check geometry,
+    states and notes. Saving ViewerSession with Ctrl+S is a separate operation.
 
-Open a Cine, select an enabled taxonomy label, and choose an unlocked Manual or
-Reviewed layer. The toolbar says **Drawing into: ...**. Geometry availability is
-read from the label's `allowed_geometry_types`; label IDs are open strings.
+## Workspace and Annotation Scheme
 
-| Shortcut | Action |
-| --- | --- |
-| 1 / 2 / 3 / 4 / 5 | Select / Point / BBox / Polygon / Magic Wand |
-| Esc | Cancel temporary drawing or edit |
-| Enter or double-click | Commit polygon (at least three distinct vertices) |
-| Backspace | Remove last polygon vertex |
-| Delete | Delete selected polygon vertex; otherwise deactivate selected annotation |
-| Ctrl+Z | Undo |
-| Ctrl+Y or Ctrl+Shift+Z | Redo |
-| Alt+Left / Alt+Right | Previous / next frame with active annotations |
-| Ctrl+Shift+S / Ctrl+Shift+O | Save / open annotation document |
-| Ctrl+Alt+O | Alternate open shortcut if the desktop intercepts Ctrl+Shift+O |
-| Ctrl+S | Save ViewerSession, independently of annotations |
+The left scrollable dock holds data/timing/display information, Scheme controls,
+current document location and the current-frame annotation list. The right side
+holds Drawing Layer, Object buttons, the one-row Select/Polygon/Wand/Point tools,
+dynamic settings, Frame State, and quality/notes. Queue remains independent.
+Long metadata values wrap and can be selected/copied.
 
-Point is a single click. BBox is press, drag in any direction, release; drawing
-requires at least one raw pixel of width and height, a UI geometry rule rather
-than a physical resolution criterion. Polygon is a series of clicks with a
-moving preview segment; its first vertex is not duplicated when closed.
+Scheme selection requires **Apply**. Apply cancels temporary drawing but retains
+records. **Modify…** edits a custom copy's display names/enabled flags, with stable
+IDs read-only. Save as a new JSON, then Apply; approved configs cannot be overwritten
+through this UI. **Open Scheme…** loads a custom JSON. A document retains its active
+Scheme snapshot. Unknown/legacy object IDs remain identifiable.
 
-Select a shape on the canvas or in the current-frame list. Selection highlights
-the shape and shows label, geometry, record ID, source, review status, model
-ID/confidence and parent record ID. Drag polygon vertices, any bbox corner or
-a point. Dragging changes a temporary working geometry; release commits one
-derived record and one undo command. Locked or hidden layers cannot be edited
-or deactivated. To edit a model record, explicitly unlock its layer; the result
-goes to an unlocked Reviewed layer and leaves the original prediction intact.
+The runtime Scheme controls object order/names/enabled flags, allowed geometry,
+colors and State display/order/common grouping. Layout remains application code.
+Semantic IDs/meanings require scheme versioning; display metadata may evolve
+separately. See [developer contracts](annotation_architecture.md).
 
-Switching frames cancels unfinished drawing/editing. Editing is disabled while
-the next frame loads, avoiding accidental annotation of the previous frame.
-Committed records remain in the document. The toolbar shows current-frame
-annotation count and the total number of annotated frames.
+## Drawing Layer and Object selection
 
-## Coordinates and provenance
+Drawing targets an unlocked **Manual** or **Reviewed** layer. Visibility and
+locking are distinct controls. Prediction and Ground Truth start locked; they
+are not direct drawing targets. Existing model edits create Reviewed derivatives
+and retain the original prediction, when explicit layer policy permits editing.
+There is no integrated model inference workflow.
 
-Coordinates always refer to **raw image pixel centers**: top-left origin,
-x = column, y = row, with bounds `[0, width-1]` and `[0, height-1]`. Subpixel
-coordinates are supported. Drawing clamps to these bounds; loading validates
-finite coordinates and bounds without silently changing the geometry.
+Object buttons are Scheme-driven and exclusive. The approved display order is
+parent, cavity candidate, daughter, flame, support, soot. An incompatible tool
+is replaced with a compatible one; enabled geometry restrictions still apply.
+BBox remains loadable/editable but is hidden from primary creation tools.
 
-Raw/Ref90/Manual/Auto, zoom and pan never modify saved coordinates. Photometric
-gain is not stored in geometry. New records include `attributes.raw_time64`,
-`attributes.relative_timestamp_s`, and optional `display_mode_used`. These come
-from the current FrameResult/display state; no nominal-FPS time fallback exists.
-The editor records the selected label without inferring physical phase or events.
+## Polygon drafts and persisted editing
 
-## Documents, history and undo
+```text
+Open Draft → Close Draft → Edit Closed Draft → Confirm → Persisted
+```
 
-AnnotationDocument is independent from ViewerSession. It contains Cine identity,
-image dimensions, taxonomy metadata/snapshot, an append-only AnnotationStore,
-active and inactive IDs, record-to-layer membership and an event history.
+Click to append vertices; move the pointer to preview the next segment. Backspace
+removes the last vertex. At least three vertices are required to close/confirm;
+the first point is not duplicated in saved geometry.
 
-Adding creates a manual/unreviewed record. Editing creates a new manual/edited
-record with `derived_from`; model metadata remains on the original prediction.
-Deleting only deactivates the ID. QUndoStack commands restore active views;
-they never erase historical records. Undo to a previously saved active view
-can still leave the document dirty because its audit history has grown.
-The undo stack itself is not restored after loading; the complete records and
-active view are restored. Backend `derive(..., review_status="ground_truth")`
-supports a retained-history Ground Truth derivative; approval UI is deferred.
+Solid square handles are real vertices; smaller hollow squares are edge midpoints,
+including the closing edge. Drag a vertex to move it. Click/drag a midpoint to
+insert and optionally move a vertex. On a selected persisted polygon, double-click
+an edge inserts the nearest projected point on that edge. Delete or right-click
+Delete Vertex removes a selected real vertex only if at least three remain.
+With no selected vertex, Delete deactivates the selected annotation.
 
-## Saving, recovery and dirty protection
-
-Annotation menu offers New, Open, Save and Save As. Default formal output is
-`outputs/annotations/<cine_stem>.annotations.json`. First save asks for a path;
-later Save uses that path. Files are Git-ignored and are never written back to
-the Cine directory by default. Only `.json` destinations are accepted.
-
-Saving creates a uniquely named temporary file in the destination directory,
-flushes and fsyncs it, closes it, then uses `os.replace`. A failed save preserves
-the previous formal JSON and leaves the document dirty. This protects against
-partial JSON replacement; it is not a guarantee against every storage failure.
-
-An asterisk marks unsaved annotation changes. New/open document, changing Cine,
-Close Cine and app close offer **Save / Discard / Cancel**. Cancel or a failed/
-cancelled Save leaves the current document in place. Cine matching checks
-filename, size, frame count, dimensions and Cine ID; a mismatch is rejected.
-These checks do not constitute a cryptographic identity guarantee.
-
-Every 30 seconds, dirty documents are atomically autosaved to
-`outputs/annotations/autosave/<cine_stem>.<document_id>.annotations.autosave.json`.
-The UUID prevents same-stem recovery collisions. Autosave does not clear dirty
-state, change the formal save path or replace an explicit Save. Recovery files
-are retained after formal Save and can be opened through Open Annotations.
-ViewerSession continues to contain only UI state/bookmarks/notes.
-
-## Limits
-
-Only point, bbox and polygon documents are editable/validated in v1; other
-geometry schemas remain future extensions and unsupported documents fail closed.
-No whole-object polygon/bbox translation, mask brush, database, dataset export, YOLO/Torch, inference, tracking or scientific
-measurement is included. There are count indicators instead of timeline ticks.
-History is in-memory until save/autosave; large-history indexing is future work.
-
-## Polygon vertex editing (UX v1.1)
-
-In Select mode, double-click near an edge of the selected polygon. The new point
-is the projection onto the nearest segment, inserted in boundary order (including
-the closing segment). The pick tolerance is in screen pixels; the stored result
-is in raw image coordinates, independent of zoom, pan and display mode.
-Click a vertex handle to select it (orange); drag to move it. Delete removes the
-selected vertex only if at least three vertices remain. Click the object/list to
-return to annotation selection before deactivating the whole object. Insertion,
-deletion and movement all create derived records and use the existing QUndoStack;
-old geometry and predictions are never overwritten.
-
-## 中文 / English
-
-The default is `zh_CN`. Settings / 设置 → Language / 语言 → 中文 or English
-persists a local QSettings preference. Restart to apply the language consistently;
-the current document is not rebuilt or discarded. Central catalogs live under
-`src/droplet_vision/ui/translations/`; missing keys fall back to English/source text.
-Core menus, panels, actions and prompts are translated; diagnostic codes remain
-stable. Taxonomy display names can be translated, but `label_id`, JSON statuses,
-record IDs and arbitrary new taxonomy labels are unchanged. Unknown display names
-remain as authored in the taxonomy. No scientific labels are inferred.
+Draft edits have transient Undo/Redo. Confirmation is one document command;
+a persisted vertex/midpoint edit produces one derived record on release. Original
+records are retained. Esc cancels temporary changes. Switching frame/tool/label
+can cancel an unfinished draft; Confirm before navigating if you want to retain it.
+Whole-object dragging and mask brushing are not offered as completed features.
 
 ## Magic Wand assisted annotation
 
-Choose an enabled label allowing polygon geometry and an unlocked Manual/Reviewed
-layer, then press **5**. Click a seed, adjust Tolerance or Connectivity, and use
-Replace/Add/Subtract for subsequent clicks. The translucent mask is temporary.
-Confirm (or Enter) creates polygons; Cancel/Esc or frame changes discard preview.
-No records are created before confirmation. Select mode can immediately correct
-the resulting polygon vertices. Multiple polygons from one confirmation share
-one compound Undo/Redo command.
+Magic Wand is a **grayscale selection aid, not an automatic physical classifier**.
+It reads the current **raw uint8 grayscale** array even in Ref90 display. Choose
+a label, click a seed, then adjust Tolerance (0–50) and Connectivity (4/8).
+Default tolerance is 10 and connectivity 8, from the
+[Wand preset](../configs/annotations/magic_wand_v1.json), not scientific thresholds.
+The seed reference is the clamped 3×3 median.
 
-**Magic Wand is a grayscale selection aid, not an automatic physical classifier.**
-It reads the current cached **raw 2D uint8** array without mutation or further Cine
-reads. Other dtypes/color input disable the tool; no scientific pixel conversion
-is performed. Ref90/Raw/Manual/Auto affect only what is displayed.
+Replace selects a new region; Add unions another region; Subtract removes one.
+Selections above the configured area fraction are refused with a warning.
+Contours are simplified into editable closed polygon drafts; manually adjust
+vertices, then Confirm. Disconnected components create separate polygons in one
+Undo macro. Holes/degenerate contours are refused rather than silently filled.
 
-Parameters have a single source: `configs/annotations/magic_wand_v1.json`.
-Defaults are tolerance 10 (slider 0–50), 8-connectivity (4 also available), a
-clamped 3×3 seed median, maximum region fraction 0.50 and RDP simplification
-1.0 raw pixel. These are assistance settings, not scientific thresholds.
-A pixel is eligible when its absolute difference from the seed median is at most
-the tolerance. If noise makes the clicked pixel ineligible, the nearest eligible
-pixel in the same 3×3 window starts the flood fill (ties by row, then column).
-The noisy pixel is not silently added. Growing uses a bounded breadth-first walk;
-excessively large regions or combined selections warn and cannot be confirmed.
-Changing tolerance/connectivity recomputes only the latest operation against its
-previous selection, so repeated adjustments do not accumulate duplicate regions.
+Changing tolerance/connectivity or seeding again can regenerate contours. After
+manual boundary edits a confirmation protects those adjustments; Cancel restores
+the prior settings/geometry. Creation provenance records seed/settings and manual
+adjustment, but no mask is serialized. Result source is manual, not model.
 
-Conversion traces ordered pixel-cell edges, separates diagonal contacts, maps
-edges into the editor's raw pixel-center bounds and applies closed-ring RDP.
-Simplification falls back if it produces fewer than three points or a crossing.
-Disconnected components become separate records with the same chosen label.
-**Holes are not supported by polygon v1:** confirmation warns and leaves the
-selection uncommitted; adjust it rather than silently filling holes. Degenerate
-regions that cannot form a valid polygon are also refused. The polygon is an
-approximation of the selection; review and correct its vertices before ground truth.
-Very complex contours can take longer on the GUI thread; no background classifier,
-mask brush or automatic physical interpretation is included.
+## Point, selection and instance naming
 
-New records are `source=manual`, `review_status=unreviewed`. Attributes record
-`creation_tool=magic_wand`, preset ID, tolerance, connectivity, seed reference,
-all seed/operation settings, size limit and simplification tolerance, in addition
-to existing TIME64/display provenance. No binary mask is serialized. Subsequent
-edits retain these creation attributes and create a new `derived_from` record.
-Raw arrays, FrameCache, Cine files, timing, scientific grayscale analysis and raw
-PNG export remain independent of this assistance pipeline.
+Point places one raw-coordinate point on click, when allowed by the label.
+Select a canvas shape or left-side list item; selection stays synchronized and
+shows record ID, label, source, review status and lineage. Drag a point to edit.
+Existing BBox corners can be resized. Geometry clamps to image bounds.
 
-## Right-side workspace (layout v1.2)
+`instance_name` is optional. **Auto name** proposes an unused current-frame name;
+**Apply name** (or Enter in the field) creates an undoable derivative. It is neither
+a model class nor a tracking ID. `annotation_id` remains the unique record ID.
 
-Labels, tool buttons, current-tool settings, frame annotations and layers now share
-the right dock. A first label selection recommends Polygon when allowed; returning
-to a label restores its last compatible drawing tool. The status bar explains the
-next gesture. Selecting a frame annotation switches to Select for editing. Tools
-still obey taxonomy and layer restrictions, preserve immutable history and use raw
-image coordinates. Display controls and all Cine/frame metadata are on the left;
-Queue stays independent. See [layout and navigation](cine_viewer.md#workstation-layout-v12-working-tree-for-review).
+## Scheme colors and daughter numbers
+
+Colors come from Scheme display metadata. The current palette uses blue
+`#3B6FB6`, teal `#2A9D8F`, orange `#E9A23B`, purple `#7A6FAC`, coral `#D96C75`
+and blue-grey `#7B8794`. Parent is blue, cavity candidate purple, flame orange,
+support blue-grey and soot coral. The Scheme remains the authoritative color source.
+
+Daughters cycle the configured palette. A positive numeric instance-name suffix
+such as `Daughter_03` selects number 3 and the corresponding cycle slot; unnamed
+objects use deterministic current-frame ordering. Canvas circle/number badges
+and list swatches use the same resolver. Save/load and derived edits preserve
+named-instance mapping. Color/number never enters Ground Truth geometry.
+
+## Frame State and quality
+
+State applies to a whole frame and has no geometry. The approved Scheme exposes
+four common checkboxes: Simple evaporation, Micro-explosion, Burning and Secondary
+breakup. **More States** contains six checkable menu actions and shows a selected
+count. Multiple selections are allowed; Chinese names include the English term,
+for example **喷发（Puffing）**.
+
+The current entry rule makes Simple evaporation exclusive with all other states.
+It is a workflow constraint, not a new physical definition. Each committed change
+creates an immutable FrameStateRecord and one Undo command; TIME64 comes from
+the current frame. An active empty-state record differs from never inspecting a frame.
+
+Uncertain is an independent quality flag. Notes are hidden unless Uncertain,
+Have note, or nonempty saved notes requires them. Have note is UI expansion state,
+not a persisted scientific field. Unchecking it never silently erases text: choose
+keep, clear or cancel. **Apply notes** commits; pending notes also flush before
+navigation, saving and dirty checks. Notes are optional even with Uncertain.
+
+## Timeline markers
+
+An upper triangle/short tick means an active human Object or human-reviewed
+Frame State exists there; pure predictions do not create it. Click within the
+15-pixel-wide screen-space hit area to navigate; hover for frame, object count
+and State names. Multiple frames in the same screen column share a marker;
+click chooses the one nearest the current frame, with earlier index breaking ties.
+Tooltip identifies this aggregation. Native slider dragging and keyboard behavior
+remain unchanged outside the upper marker hit area.
+
+Markers update on editing, deactivation, Undo/Redo and loading. Package available
+and target markers remain distinct lower markers. Alt+Left/Right also navigate
+annotated frames; a marker is not a Queue Done flag or Ground Truth approval.
+
+## Saving, history and recovery
+
+**Save Annotations** writes an AnnotationDocument atomically (temporary file,
+fsync, replace). Default standalone location: `outputs/annotations/`; queue-managed
+work uses the queue's `annotations/` directory. Current Annotation Data shows actual
+or suggested paths plus dirty status, Copy Path and Open Folder.
+
+Edits append records with `derived_from`; Delete deactivates rather than erases.
+Undo/Redo changes the active view but preserves history. Consequently returning
+to an earlier visible shape may still leave unsaved audit/history changes.
+Changing Cine, loading another document or exiting protects dirty work with
+Save/Discard/Cancel. Autosave runs every 30 seconds when dirty, under an ignored
+autosave directory, and does not mark the formal document saved.
+
+Open Annotations checks Cine identity/dimensions and validates geometry/history.
+ViewerSession does not contain annotations. In package mode annotation Save routes
+to **Save Reviewed Package As…**; see [review instructions](portable_review_package.md).
+
+## Language and branding
+
+中文/English switches live from the top button or Settings, preserving Cine,
+frame, draft, selection and unsaved records. Stable IDs/storage keys do not change.
+Scheme-localized names are resolved on switching. Help → About shows version,
+repository owner `xiaorouqiuzi-ai`, repository link and the icon derived from
+project `planico.jpg`.
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| 1 / 2 / 4 / 5 | Select / Point / Polygon / Magic Wand |
+| Enter | Close open draft; Confirm closed draft |
+| Esc / Backspace | Cancel temporary work / remove last open polygon vertex |
+| Delete | Delete selected vertex, otherwise deactivate selected annotation |
+| Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | Undo / Redo; draft history first when active |
+| Alt+Left / Alt+Right | Previous / next annotated frame |
+| Ctrl+Shift+S | Save Annotations |
+| Ctrl+Shift+O or Ctrl+Alt+O | Open Annotations |
+| Ctrl+S | Save ViewerSession separately |
+| R / P / E | Raw / Ref90 / previous enhanced display |
+
+Related: [Viewer](cine_viewer.md) · [Label definitions](annotation_labeling_scheme_v1.md) · [Index](README.md).

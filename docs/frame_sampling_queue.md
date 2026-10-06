@@ -1,7 +1,7 @@
 # Frame Sampling + Annotation Queue v1
 
-Implemented on main; no new dependencies or model
-inference. The source dataset is read-only. Sampling produces candidates for
+Implemented in the current source; no model inference is required.
+The source dataset is read-only. Sampling produces candidates for
 human annotation, not nucleation, puffing or micro-explosion classifications.
 
 ## Reproducible sampling
@@ -93,6 +93,16 @@ distinct. Annotation filenames additionally include a relative-path hash.
 
 ## Viewer workflow
 
+1. Build a queue using the CLI above, or obtain an existing queue JSON.
+2. Open the queue and set its dataset root to the folder containing the relative
+   Cine paths. The queue does not embed source videos.
+3. Open the first pending item. Select a label, draw, and confirm annotations
+   using the [Annotation Editor](annotation_editor.md).
+4. Save the AnnotationDocument, then explicitly mark the queue item Done,
+   Skipped or Needs Review. Add a note if the next reviewer needs context.
+5. Use Next Pending to continue. Reopen the same queue to resume saved progress;
+   IN_PROGRESS items remain available for explicit selection.
+
 Use **Queue → Open Queue...** then **Set Dataset Root...**. The local root is
 never serialized. Missing or changed files are marked unavailable without
 crashing; correcting the root rechecks availability. The queue dock can be hidden
@@ -124,6 +134,13 @@ outside the queue folder may be saved but are not given nonportable links; save
 inside the queue folder to make progress portable. Queue status is not an
 annotation or scientific ground-truth approval, and does not imply annotation
 Save. Save annotations explicitly before marking work complete.
+
+Timeline human-annotation markers indicate active human objects or frame-state
+records, not queue completion. A DONE item may have no objects, and a marked
+frame may still be IN_PROGRESS. See [timeline navigation](cine_viewer.md).
+For external reviewers without Cine access, use a
+[portable review package](portable_review_package.md) instead of sending only
+the queue JSON.
 
 ## Scientific boundary and validation
 

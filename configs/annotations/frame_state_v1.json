@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "state_schema_id": "droplet_frame_state_v1",
+  "version": "1.0",
+  "states": [
+    {
+      "state_id": "simple_evaporation",
+      "display_name_en": "Simple evaporation",
+      "display_name_zh": "单纯 / 稳定蒸发",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "nucleation",
+      "display_name_en": "Nucleation",
+      "display_name_zh": "成核（Nucleation）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "puffing",
+      "display_name_en": "Puffing",
+      "display_name_zh": "Puffing",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "micro_explosion",
+      "display_name_en": "Micro-explosion",
+      "display_name_zh": "微爆（Micro-explosion）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "burning",
+      "display_name_en": "Burning",
+      "display_name_zh": "燃烧（Burning）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "boiling",
+      "display_name_en": "Boiling",
+      "display_name_zh": "沸腾（Boiling）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "sooting",
+      "display_name_en": "Sooting",
+      "display_name_zh": "烟炱生成（Sooting）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "secondary_breakup",
+      "display_name_en": "Secondary breakup",
+      "display_name_zh": "二次破碎（Secondary breakup）",
+      "group": "core",
+      "enabled": true
+    },
+    {
+      "state_id": "bubble_growth",
+      "display_name_en": "Bubble growth",
+      "display_name_zh": "气泡 / 空腔生长",
+      "group": "dynamic",
+      "enabled": true
+    },
+    {
+      "state_id": "oscillation_deformation",
+      "display_name_en": "Oscillation / deformation",
+      "display_name_zh": "振荡 / 变形",
+      "group": "dynamic",
+      "enabled": true
+    }
+  ],
+  "quality_flags": [
+    {
+      "flag_id": "uncertain",
+      "display_name_en": "Uncertain",
+      "display_name_zh": "不确定（Uncertain）",
+      "enabled": true
+    }
+  ],
+  "exclusive_state_id": "simple_evaporation"
+}

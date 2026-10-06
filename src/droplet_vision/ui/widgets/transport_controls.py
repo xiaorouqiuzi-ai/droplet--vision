@@ -1,8 +1,8 @@
 from ..i18n import tr
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QComboBox, QLabel
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QComboBox, QLabel
 
-REVIEW_PLAYBACK_FPS = (1, 2, 5, 10, 15, 20, 30, 1000)
+REVIEW_PLAYBACK_FPS = (1, 2, 5, 10, 15, 20, 30, 60, 120, 240, 500, 1000)
 
 
 class TransportControls(QWidget):
@@ -14,32 +14,30 @@ class TransportControls(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        self.frame_step = QComboBox()
-        self.frame_step.setObjectName('frameStep')
-        for value in (1, 10, 100, 1000):
-            self.frame_step.addItem(tr('{count} frames').format(count=value), value)
-        self.previous = QPushButton('<')
-        self.next = QPushButton('>')
-        self.previous.setToolTip(tr('Previous by selected frame step'))
-        self.next.setToolTip(tr('Next by selected frame step'))
-        self.previous.clicked.connect(lambda: self.step.emit(-self.frame_step.currentData()))
-        self.next.clicked.connect(lambda: self.step.emit(self.frame_step.currentData()))
-        first, last = QPushButton('|<'), QPushButton('>|')
-        first.clicked.connect(self.first.emit)
-        last.clicked.connect(self.last.emit)
-        for button in (first, self.previous, self.next, last):
-            button.setMaximumWidth(45)
-            layout.addWidget(button)
-        layout.addWidget(QLabel(tr('Frame step')))
-        layout.addWidget(self.frame_step)
-        self.play = QPushButton(tr("Play"))
+        layout = QVBoxLayout(self)
+        navigation = QHBoxLayout()
+        layout.addLayout(navigation)
+        self.jump_buttons = {}
+        self.frame_label = QLabel('0 / 0')
+        for delta in (-1000, -100, -10, -1, 1, 10, 100, 1000):
+            if delta == 1:
+                navigation.addWidget(self.frame_label, 1)
+            button = QPushButton(f'{delta:+d}')
+            button.setToolTip(tr('Jump {delta} frames').format(delta=f'{delta:+d}'))
+            button.clicked.connect(lambda checked=False, value=delta: self.step.emit(value))
+            navigation.addWidget(button)
+            self.jump_buttons[delta] = button
+        self.previous, self.next = self.jump_buttons[-1], self.jump_buttons[1]
+        playback = QHBoxLayout()
+        layout.addLayout(playback)
+        self.play = QPushButton(tr('Play'))
         self.play.clicked.connect(self.toggle_play.emit)
-        layout.addWidget(self.play)
-        layout.addWidget(QLabel(tr("Review playback FPS")))
+        playback.addWidget(self.play)
+        playback.addWidget(QLabel(tr('Target Review FPS')))
         self.fps = QComboBox()
         self.fps.addItems([str(fps) for fps in REVIEW_PLAYBACK_FPS])
-        self.fps.setToolTip(tr('Target review playback rate; actual speed depends on decoding and rendering.'))
-        self.fps.setCurrentText("10")
+        self.fps.setToolTip(tr('Target review speed; actual speed depends on Cine decoding, cache and rendering. Experimental time always comes from TIME64.'))
+        self.fps.setCurrentText('10')
         self.fps.currentTextChanged.connect(lambda value: self.fps_changed.emit(int(value)))
-        layout.addWidget(self.fps)
+        playback.addWidget(self.fps)
+        playback.addStretch()

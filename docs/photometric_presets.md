@@ -2,6 +2,10 @@
 
 ## photometric_ref90_v1
 
+The user-facing name is **Photometric Normalization (Ref90)** in English and
+**亮度标准化（Ref90）** in Chinese. The internal preset ID remains
+`photometric_ref90_v1`; UI naming does not change its scientific-use restrictions.
+
 The user-selected brightness reference is
 `DBD__202012__2.0ulBD46450c8__frame_000966.png`.
 Its whole-image raw P90 is **232**; the target is **90%**, or **208.8**.

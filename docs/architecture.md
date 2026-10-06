@@ -1,53 +1,69 @@
-# Research architecture
+# Software architecture overview
 
-Object segmentation and state analysis are separate contracts. Models are
-selected by task/object; a physical state never requires its own YOLO model.
+This page maps implementation responsibilities. The normative storage and
+provenance boundaries are defined in
+[Data Architecture v1.0](data_architecture_concept_v1.md); object/state semantics
+are defined in the [labeling scheme](annotation_labeling_scheme_v1.md).
 
-| Layer | Responsibility | Package |
+## Current components
+
+| Component | Responsibility | Status |
 | --- | --- | --- |
-| 1 — Cine infrastructure | Decode frames, preserve metadata and raw TIME64 | cine |
-| 2 — Preprocessing | Document ROI, transformations and intensity changes | preprocessing |
-| 3 — Segmentation | Parent, cavity candidate, daughter and optional interference masks | segmentation |
-| 4 — Tracking | Associate instances through time; record ambiguity and lineage | tracking |
-| 5 — State/Event analysis | Infer provisional states/events from temporal evidence | states, events |
-| 6 — Scientific metrics | Produce calibrated, uncertainty-aware measurements | metrics |
-| 7 — Statistical outputs | Aggregate by experiment into datasets and figures | datasets |
+| `cine` | Read-only Cine decoding, metadata and raw TIME64 | Implemented |
+| `display` | Independent Raw/Manual/Auto/Ref90 display arrays | Implemented |
+| `annotations` | Open labels, validated geometry, immutable records, active views, Frame States and Scheme metadata | Implemented |
+| `sampling` | Anchors, raw-image change peaks, resumable JSON queues | Implemented |
+| `review_package` | Sparse raw PNG packages, provenance and conflict-aware return import | Implemented v1; single-user workflow |
+| `ui` | Viewer, annotation editor, queue and offline review interaction | Implemented; PySide6 optional |
 
-These are responsibility layers, not a rigid one-pass execution order.
-For example, YOLO-seg may supply parent, cavity and daughter masks. `metrics`
-then derives area, perimeter, D_eq, circularity, cavity fraction and fragment
-count. `states`/`events` consume those time series to assess NUCLEATION,
-PUFFING and MICRO_EXPLOSION; event-conditioned metrics follow afterward.
+CineReader returns raw pixels. The UI transforms a separate display array,
+while geometry always uses raw image coordinates. Sampling ranks raw frame
+differences. Annotation and review history never become source-video metadata.
 
-Planned analyzers cover evaporation, nucleation, bubble growth, puffing,
-micro-explosion and ignition. `states` describes intervals/frame states;
-`events` records onsets, supporting evidence and uncertainty. No analyzer or
-segmentation algorithm is implemented in this scaffold.
+The Qt-free AnnotationDocument owns records and active IDs. ViewerSession owns
+UI state. The queue owns work-item status. A review package carries selected
+frames and snapshots; it is not a replacement for the full source Cine or a
+shared annotation database. See [Annotation architecture](annotation_architecture.md)
+for persistence and command contracts.
 
-Do not create a giant `micro_explosion_yolo.py` combining segmentation,
-event classification, measurement and plotting. Future state-specialized
-models must still emit the same object-mask contract.
+## Future responsibilities
 
-## Interfaces and provenance
+| Layer | Planned responsibility |
+| --- | --- |
+| Model preprocessing | Explicitly versioned dataset/model transformations |
+| Segmentation | Backend-neutral object masks with model/run provenance |
+| Tracking | Temporal association, ambiguity and lineage |
+| State/event analysis | Contextual probabilities and onset evidence |
+| Measurement | Calibrated projected metrics and uncertainty |
+| Dataset/statistical output | Reproducible splits, exports and scientific figures |
 
-`FrameResult` identifies a frame by `(cine_id, frame_index)` and carries optional
-masks, state and timing provenance. `FrameMetrics` carries optional 2D values;
-associate it with that frame key in downstream records. Missing measurements
-are `None`; zero is reserved for an actual measurement.
+Existing scaffolds/interfaces do not imply an implemented segmentation,
+tracking, measurement or training pipeline. `inference.PredictionProvider`
+is a future adapter interface. Prediction Store and Measurement Store remain
+planned, separate from Human Ground Truth.
 
-Adapters must document mask representation, image dimensions, coordinate
-origin, ROI/transform history, instance IDs, model IDs, calibration and
-preprocessing provenance in metadata. Daughter/cavity instances must remain
-distinguishable. The schema intentionally accepts backend-neutral mask types.
-Raw TIME64 integers must survive every serialization boundary.
+Object segmentation and state analysis are separate contracts. A physical
+state does not require its own YOLO model. A future segmentation backend may
+provide parent, cavity and daughter masks; measurement and temporal analysis
+then consume those outputs with their own provenance. Do not combine all
+responsibilities into one event-specific model module.
 
-VisionLab now owns Cine/data processing and the optional Viewer UI; future GPU
-inference/training remains separate. Keep optional backend imports inside their adapters. Core schema,
-enums and tests depend only on the standard library. Configuration and model
-metadata bridge the environments without merging them.
+## Interfaces and dependencies
 
-The Qt-free `annotations` package owns an open taxonomy, image-coordinate
-records, append-only review provenance and portable sessions. `ui` consumes
-CineReader and those records; `inference.PredictionProvider` is a backend-neutral
-future extension point. See [cine_viewer.md](cine_viewer.md) for the workstation
-workflow and v1 limits.
+`FrameResult` identifies a frame by Cine/frame index and carries timing
+provenance. Existing optional result/metric schema fields are extension points,
+not evidence of computed measurements. Missing measurements are `None`;
+zero is reserved for an actual measurement.
+
+Adapters must document mask representation, dimensions, origin, ROI/transform
+history, instance IDs, model ID and calibration. Raw TIME64 integers must
+survive serialization. Optional backend imports belong inside their adapters.
+
+The Viewer environment currently uses NumPy, Pillow, PIMS and PySide6.
+Future GPU training/inference environments remain separate. No Torch,
+Ultralytics or OpenCV dependency is required by the current workstation.
+
+For usage start with [Getting Started](getting_started.md); for developer
+details see [Annotation architecture](annotation_architecture.md),
+[preprocessing policy](image_preprocessing_policy.md) and
+[model strategy](model_strategy.md).

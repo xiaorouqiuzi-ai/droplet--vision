@@ -5,8 +5,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBu
 
 class ToolSettingsPanel(QWidget):
     HINTS = {
-        'select': 'Select an annotation; drag handles to edit. Double-click an edge to insert a vertex.',
-        'polygon': 'Click the image to add vertices. Enter finishes; Esc cancels.',
+        'select': 'Drag solid squares to move vertices; click or drag hollow squares to insert. Right-click a vertex to delete.',
+        'polygon': 'Click to add vertices. Click the first vertex to close; adjust the draft, then Confirm. Esc cancels.',
         'magic_wand': 'Click a region in the image, then adjust and confirm the preview.',
         'bbox': 'Press and drag on the image, then release to create a bounding box.',
         'point': 'Click the image to create a point.',
@@ -39,11 +39,11 @@ class ToolSettingsPanel(QWidget):
         self.vertex_count = QLabel()
         polygon_layout.addWidget(self.vertex_count)
         polygon_layout.addWidget(self._button('Remove last polygon vertex', lambda: editor.tool.backspace()))
-        polygon_layout.addWidget(self._button('Edit existing vertices (Select)', lambda: editor.switch_tool('select')))
-        polygon_layout.addWidget(QLabel(tr('Insert Vertex: double-click an edge in Select. Delete removes a selected vertex.')))
+        polygon_layout.addWidget(QLabel(tr('Solid squares: vertices. Hollow squares: insert. Right-click a vertex to delete.')))
         polygon_layout.itemAt(polygon_layout.count()-1).widget().setWordWrap(True)
         buttons = QHBoxLayout()
-        buttons.addWidget(self._button('Finish (Enter)', lambda: editor.tool.commit()))
+        self.confirm_button = self._button('Confirm', lambda: editor.tool.commit())
+        buttons.addWidget(self.confirm_button)
         buttons.addWidget(self._button('Cancel (Esc)', editor.cancel))
         polygon_layout.addLayout(buttons)
         self.pages['magic_wand'].layout().addWidget(editor.wand_panel)
@@ -63,6 +63,8 @@ class ToolSettingsPanel(QWidget):
 
     def refresh(self):
         editor = self.editor
+        draft = getattr(editor.tool, 'draft', None)
+        self.confirm_button.setEnabled(bool(draft and draft.closed and draft.active))
         self.vertex_count.setText(tr('Current vertices: {count}').format(count=len(getattr(editor.tool, 'points', []))))
         record = editor.selected_record()
         index = editor.selected_vertex

@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "scheme_id": "droplet_annotation_scheme_v1",
+  "version": "1.0",
+  "status": "approved_baseline",
+  "display_name": {
+    "zh_CN": "液滴标注方案 v1.0",
+    "en_US": "Droplet Annotation Scheme v1.0"
+  },
+  "object_taxonomy": "default_taxonomy.json",
+  "frame_state_schema": "frame_state_v1.json",
+  "instance_prefixes": {
+    "parent_droplet": "Parent",
+    "internal_cavity_candidate": "Cavity",
+    "daughter_droplet": "Daughter",
+    "flame": "Flame",
+    "soot": "Soot",
+    "support_structure": "Support"
+  },
+  "display": {
+    "revision": 2,
+    "description": "Workspace v1.6 display revision; semantic scheme v1.0 unchanged.",
+    "palette": [
+      "#3B6FB6",
+      "#2A9D8F",
+      "#E9A23B",
+      "#7A6FAC",
+      "#D96C75",
+      "#7B8794"
+    ],
+    "object_order": [
+      "parent_droplet",
+      "internal_cavity_candidate",
+      "daughter_droplet",
+      "flame",
+      "support_structure",
+      "soot"
+    ],
+    "object_styles": {
+      "parent_droplet": {
+        "mode": "fixed",
+        "color": "#3B6FB6"
+      },
+      "internal_cavity_candidate": {
+        "mode": "fixed",
+        "color": "#7A6FAC"
+      },
+      "daughter_droplet": {
+        "mode": "cycle",
+        "palette": "daughter_palette"
+      },
+      "flame": {
+        "mode": "fixed",
+        "color": "#E9A23B"
+      },
+      "support_structure": {
+        "mode": "fixed",
+        "color": "#7B8794"
+      },
+      "soot": {
+        "mode": "fixed",
+        "color": "#D96C75"
+      }
+    },
+    "common_frame_states": [
+      "simple_evaporation",
+      "micro_explosion",
+      "burning",
+      "secondary_breakup"
+    ],
+    "frame_state_order": [
+      "simple_evaporation",
+      "nucleation",
+      "puffing",
+      "micro_explosion",
+      "burning",
+      "boiling",
+      "sooting",
+      "secondary_breakup",
+      "bubble_growth",
+      "oscillation_deformation"
+    ],
+    "state_names": {
+      "simple_evaporation": {
+        "en_US": "Simple evaporation",
+        "zh_CN": "单纯 / 稳定蒸发（Simple evaporation）"
+      },
+      "nucleation": {
+        "en_US": "Nucleation",
+        "zh_CN": "成核（Nucleation）"
+      },
+      "puffing": {
+        "en_US": "Puffing",
+        "zh_CN": "喷发（Puffing）"
+      },
+      "micro_explosion": {
+        "en_US": "Micro-explosion",
+        "zh_CN": "微爆（Micro-explosion）"
+      },
+      "burning": {
+        "en_US": "Burning",
+        "zh_CN": "燃烧（Burning）"
+      },
+      "boiling": {
+        "en_US": "Boiling",
+        "zh_CN": "沸腾（Boiling）"
+      },
+      "sooting": {
+        "en_US": "Sooting",
+        "zh_CN": "烟炱生成（Sooting）"
+      },
+      "secondary_breakup": {
+        "en_US": "Secondary breakup",
+        "zh_CN": "二次破碎（Secondary breakup）"
+      },
+      "bubble_growth": {
+        "en_US": "Bubble growth",
+        "zh_CN": "气泡 / 空腔生长（Bubble growth）"
+      },
+      "oscillation_deformation": {
+        "en_US": "Oscillation / deformation",
+        "zh_CN": "振荡 / 变形（Oscillation / deformation）"
+      }
+    },
+    "daughter_palette": [
+      "#2A9D8F",
+      "#E9A23B",
+      "#7A6FAC",
+      "#D96C75",
+      "#7B8794",
+      "#3B6FB6"
+    ],
+    "object_display_names": {
+      "parent_droplet": {
+        "zh_CN": "父液滴",
+        "en_US": "Parent droplet"
+      },
+      "internal_cavity_candidate": {
+        "zh_CN": "内部空腔候选区",
+        "en_US": "Internal cavity candidate"
+      },
+      "daughter_droplet": {
+        "zh_CN": "子液滴",
+        "en_US": "Daughter droplet"
+      },
+      "flame": {
+        "zh_CN": "火焰",
+        "en_US": "Flame"
+      },
+      "support_structure": {
+        "zh_CN": "支撑结构",
+        "en_US": "Support structure"
+      },
+      "soot": {
+        "zh_CN": "烟炱",
+        "en_US": "Soot"
+      }
+    }
+  }
+}

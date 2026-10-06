@@ -1,302 +1,153 @@
-# Cine Viewer UI v1 and annotation workstation foundation
+# Cine Viewer
 
-Implemented on main.
+Implemented read-only viewing and display controls. Start with
+[Getting Started](getting_started.md); drawing operations belong in the
+[Annotation Editor guide](annotation_editor.md).
 
-Annotation Editor v1 and UX v1.1 are implemented on main. See [editor usage](annotation_editor.md) and
-[AnnotationDocument architecture](annotation_architecture.md).
+## Open and Close
 
-Display Enhancement v1 is implemented on main, with default Photometric Ref90,
-Raw, Manual and Auto percentile display modes. These three data paths remain independent:
+From the source root, launch `launch_viewer.cmd` or `python scripts/launch_viewer.py`.
+File → Open Cine (Ctrl+O) opens through CineReader, asynchronously. A bounded LRU
+cache holds raw decoded frames (default 64); no whole-video pixel preload occurs.
+Metadata/offset/TIME64 tables may be read at opening. Stale async responses are
+ignored when navigating or switching Cine.
 
-- Display pipeline: raw frame → independent display transform → QImage.
-- Scientific pipeline: raw frame → scientific measurement.
-- Annotation geometry: raw image coordinates, independent of display settings.
+File → Close Cine releases the current source. Dirty annotations offer
+Save/Discard/Cancel. ViewerSession/bookmarks require their own explicit save.
+Shutdown waits for outstanding reader I/O; a blocked filesystem operation has no
+hard cancellation. No source-side cache or annotation is written.
 
-Launch from a source
-checkout with `python scripts/launch_viewer.py [--cine path/to/sample.cine]`.
-VisionLab Python 3.12 is the current environment; see README for exact tested
-versions. The UI only opens input through `droplet_vision.cine.CineReader`.
-No Qt dependency enters core, Cine, annotations or inference interfaces.
+## Interface and Metadata
 
-## Responsibilities
+The left scrollable panel contains Image information, Timing information, Camera
+information, Current frame, Display, Annotation Scheme, Current Annotation Data
+and Current frame annotations. Values wrap, are selectable, and retain full TIME64
+integers. Unknown metadata is shown as unknown, not invented.
 
-`ui.app` starts Qt; `MainWindow` composes metadata, taxonomy, layers, bookmarks,
-Graphics View canvas, timeline and transport widgets. `CineController` owns a
-single worker pool and serializes all reader/cache access. Only one I/O task is
-active and one newest pending navigation/control task is retained, plus one
-pending explicit reference recalculation. Separate reference revisions and
-frame tokens reject stale opens, references, frame responses and failures.
-Closing invalidates outstanding requests; app
-shutdown waits for running I/O before closing the file handle.
+The center is the image canvas. The right workspace holds annotation operations;
+Queue and bookmarks remain separate docks. Menus are File, Annotation, Queue,
+View, Model, Settings, Help. Language switches live; About shows software version,
+repository/author information and the project icon.
 
-`FrameCache` stores raw arrays with a configurable default limit of 64 frames.
-It is cleared across Cine changes; raw cached arrays are read-only. UI display
-copies data into an independently owned QImage. No complete video is loaded.
-Opening metadata/timestamps is also asynchronous. Slider movement debounces
-for 50 ms; navigation buttons/spinbox request immediately. While a newer slider
-intent is pending, an older response cannot reset the slider.
+## TIME64
 
-Canvas uses QGraphicsView/QGraphicsScene. Wheel or +/- zooms; middle drag pans;
-F fits the image. Overlay scene coordinates equal original image coordinates.
-2D uint8 and RGB uint8 display unchanged. uint16 grayscale display divides by
-256 into uint8; this is a fixed display-only mapping, not normalization of raw
-data. Scientific values and PNG export continue to use raw arrays.
+Current-frame raw TIME64, relative timestamp and timing status come from FrameResult.
+Relative time is displayed in seconds with nine decimal places when available.
+Header FPS, timestamp-derived FPS and their ratio are diagnostics, not competing
+automatic choices of scientific time.
 
-The unchanged display above is the **Raw** reference mode. The Display panel
-also offers Photometric Ref90, Manual and Auto contrast; these operate on independent copies
-between the raw cache and QImage. `droplet_vision.display` uses NumPy and has no
-Qt dependency. CineReader and FrameCache retain raw pixels. Changing settings
-rerenders only the current cached image, without requesting or decoding a frame.
+**Never replace TIME64 with frame_index / header FPS.** Some validated recordings
+show unresolved disagreement; missing/invalid timing is retained explicitly.
+Software regression cannot establish experimental timing validity. See the
+[timing policy](timing_policy.md) and [reader details](cine_reader.md).
 
-## Display enhancement
+## Navigation and Playback
 
-**DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA**
+| Control | Result |
+| --- | --- |
+| Fixed buttons ±1 / ±10 / ±100 / ±1000 | Jump by the stated frame count, clamped |
+| Left/Right; Shift+Left/Right | ±1; ±10 |
+| PgUp/PgDown; Ctrl+PgUp/PgDown | ±100; ±1000 |
+| Home / End | First / last frame |
+| Slider / spinbox | Seek frame index; slider requests debounce for 50 ms |
+| Upper human marker | Click to jump; hover for object/state information |
+| Space / Play | Toggle sequential review playback |
 
-Display-enhanced pixels must not replace raw pixels for scientific grayscale
-statistics, cavity intensity analysis, physical interpretation or raw frame
-export. Bright/dark appearance alone does not establish phase identity.
-Adjusting settings uses the current raw cached frame without rereading Cine,
-modifying FrameCache, altering annotations or changing timestamps.
+Target Review FPS offers 1, 2, 5, 10, 15, 20, 30, 60, 120, 240, 500, 1000;
+default 10. Playback advances by one frame, waits for decode and stops at the end.
+Actual speed depends on disk, decoding, cache and rendering. FPS is independent
+of jump buttons, header FPS and scientific timestamps; 1000 FPS is a target, not a guarantee.
 
-- Raw: uint8 grayscale/RGB values are preserved exactly in an independent array.
-- Photometric Ref90 v1: apply one locked Cine reference gain, as described below.
-- Manual: normalize the display reference to `u = pixel / 255`, then compute
-  `v = clip((u - 0.5) * contrast + 0.5 + brightness, 0, 1)`, followed by
-  `round_to_even(255 * v**gamma)` as uint8. UI Brightness -100..100 maps to
-  -1..1; Contrast is 0.25..4; Gamma is 0.2..5. Gamma 1 is neutral. With this
-  display formula, a smaller gamma brightens midtones; it is not a physical
-  correction. Manual parameters are inactive in Raw/Auto/Ref90 modes.
-- Auto contrast: compute NumPy's linear percentiles over the display reference
-  (default 1 and 99), map low to 0 and high to 255, clip and round to uint8.
-  RGB uses a shared range over all channels, not independent channel balancing.
-  If high <= low, retain the Raw reference and show an insufficient-range
-  diagnostic, avoiding division by zero for constant images. A narrow but
-  positive range is safely stretched and clipped. Changing a percentile past its partner adjusts the partner by
-  0.1 percentage point so low stays below high.
+Upper markers retain native slider behavior outside their 15-pixel hit width
+and top strip. Same-column markers are painted once; click selects the represented
+frame nearest the current position. Tooltip identifies aggregation and lazily
+resolves human Object count and localized State names. Pure predictions are excluded.
+See [marker details](annotation_editor.md#timeline-markers).
 
-uint16 retains the existing fixed `//256` reference mapping before either
-enhancement. This is deliberately limited display support, not full-depth
-scientific processing. Inputs, dtype and shape remain unchanged; outputs are
-independent uint8 arrays with the same geometry. No resampling takes place.
+## Auto Fit, Zoom and Pan
 
-R switches to Raw; P selects Ref90; E restores the previous non-Raw mode
-(Ref90 after a normal Cine open).
-Reset Display restores Raw, brightness 0, contrast/gamma 1 and percentiles 1/99,
-without resetting frame position, zoom/pan, overlays, bookmarks or notes. The
-status bar always names the display mode and marks active enhancement. Display
-diagnostics are separate from the raw Metadata panel. Export Current Frame
-always exports raw pixels, regardless of the visible mode; its tooltip says
-"Export Current Frame exports raw scientific pixels, not display-enhanced preview."
+Auto Fit defaults ON for each Cine. First valid image, dimension changes and view
+resize fit the image; ordinary frame changes preserve manual view state. Wheel
+or +/- zooms; middle drag pans. Manual zoom/pan disables Auto Fit. F or the Auto Fit
+control refits and re-enables it. All scene coordinates remain raw image coordinates.
 
-ViewerSession saves `ui_state.display` using DisplaySettings serialization.
-Opening a new Cine starts in Ref90; a matching loaded session restores its display
-mode. Old sessions without this field use Ref90. Invalid/unavailable settings
-produce a warning and fall back to Raw. No display settings enter annotation
-geometry or scientific metadata. Modes use extensible string IDs and a display
-backend registry; registering a backend before constructing the panel adds its
-mode to the selector. Additional backend-specific controls remain future work.
-No CLAHE, histogram widget or Display Preview export is implemented in this update.
-See [image preprocessing policy](image_preprocessing_policy.md) for the required
-separation from model preprocessing and scientific intensity analysis.
+## Display Modes
 
-## Photometric Ref90: default Cine-locked display
+**DISPLAY TRANSFORM != SCIENTIFIC PIXEL DATA.** Display settings rerender the
+cached raw frame, without decoding it again. Metadata statistics are not silently
+replaced with enhanced values.
 
-The Viewer reads `configs/photometry/photometric_ref90_v1.json` as the single
-source of photometric parameters. The frozen v1 preset is unchanged. The
-Qt-independent `display.photometric` module loads and validates the contract,
-estimates a reference and applies its scalar gain to independent display arrays.
+| Mode | Behavior |
+| --- | --- |
+| Raw | Independent display copy; uint8 grayscale/RGB values unchanged |
+| Photometric Normalization (Ref90) / 亮度标准化（Ref90） | Default, one locked gain for the Cine |
+| Manual | Brightness -100…100, contrast 0.25…4, gamma 0.2…5 |
+| Auto contrast | Percentile stretch, default 1–99; constant images safely retain reference display |
 
-Opening a Cine asynchronously reads the raw frame at
-`clamp(round((frame_count - 1) * 0.03), 0, frame_count - 1)`.
-Its raw whole-image P90 determines the gain from the preset target and bounds.
-The worker caches that raw reference frame and retains one immutable gain record
-for the Cine. **No per-frame renormalization** occurs during navigation or
-playback. Ref90 never stacks gamma, offsets, Manual settings or percentile stretch.
+R selects Raw, P Ref90, E the previous enhanced mode. Reset selects Raw and
+restores neutral/manual/default percentiles without changing frame, zoom or annotations.
+Only one transform is active; Manual is not stacked onto Ref90. Raw uint16 display
+uses a fixed `//256` uint8 mapping; that is display-only, not preservation of full
+16-bit intensity on screen. RGB/uint16 do not use the Ref90 v1 estimator.
 
-Only reopening a Cine or explicitly clicking **Recalculate Reference** re-reads
-the reference and recalculates the gain. While initialization is pending, the UI
-reports `Initializing Photometric Ref90...`; any available current frame uses
-Raw until ready. The gain then rerenders that same current frame. Switching to
-Raw/Manual/Auto while waiting is respected. A separate reference request revision
-prevents a stale recalculation from affecting another Cine; navigation cannot
-discard an explicit recalculation.
+### Photometric Ref90: default Cine-locked display
 
-The Display panel reports preset ID, reference frame/fraction/P90, target P90,
-raw/applied gain, reference saturation fraction and QC status. Gain clipping,
-high gain and saturation thresholds come from the JSON. Warnings do not trigger
-an automatic corrective pass. Nonpositive P90, reference read failures and
-unsupported reference pixels produce `PHOTOMETRIC_REFERENCE_FAILED`; Ref90 falls
-back to Raw with a visible explanation. This v1 preset supports uint8 grayscale;
-RGB/uint16 retain the existing Raw/Manual/Auto behavior.
+The frozen [preset](../configs/photometry/photometric_ref90_v1.json) remains
+`photometric_ref90_v1`. The asynchronous worker uses raw frame
+`round((frame_count - 1) * 0.03)`, clamped, to estimate one P90-based gain.
+It stays fixed across navigation/playback. Reopen or **Recalculate Reference**
+explicitly recalculates; a mode change alone does not.
 
-`ui_state.photometric` in ViewerSession records preset ID/version/hash,
-reference fraction/index/P90, target, gains, reference saturation and status.
-It is UI/preprocessing provenance, never FrameResult or scientific metadata.
-Loading a session restores its display mode but recomputes the reference on
-reopen, rather than trusting a saved gain against possibly changed input data.
+Advanced Display information shows preset ID, reference index/P90, target, gains,
+saturation and QC. Warnings do not automatically change gain. Invalid reference
+or unsupported pixels produces a visible Raw fallback. In package mode, exported
+gain provenance is used and recalculation is unavailable; Cine is not accessed.
 
-Raw Cine, raw cache, raw exports and scientific intensity sources remain
-unchanged. Point/bbox/polygon overlays stay in raw image coordinates. R and P
-allow immediate Raw/Ref90 comparison without disk reads. Reset Display still
-chooses Raw and preserves the current frame, zoom, annotations and bookmarks.
-There is no normalized export command in this integration.
+Manual uses normalized pixels, contrast around mid-gray, brightness offset,
+clipping, then gamma and uint8 rounding. Auto stretches the configured percentiles;
+neither is physical intensity correction. Detailed boundaries and preset provenance
+are in [preprocessing policy](image_preprocessing_policy.md) and
+[photometric presets](photometric_presets.md).
 
-Future dataset exporters or model preprocessing may explicitly load the same
-[versioned preset](photometric_presets.md) for reproducibility. Viewer display
-settings are not silently forwarded to PredictionProvider or training.
+## Raw Export
 
-## Navigation and timing
+File → Export Current Frame (Ctrl+E) saves raw PNG, regardless of display mode.
+Default filename is `<cine>_frame_<index>.png`, under `outputs/viewer_frames/`.
+Current uint8 grayscale export is verified by reopening and comparing pixels.
+It contains no overlay or Ref90 enhancement. There is no separately implemented
+enhanced-preview export command.
 
-Left/Right step one; Shift+Left/Right step ten; PageUp/PageDown step 100;
-Home/End jump to first/last. All requests clamp to valid indices. Space toggles
-review playback. Review Playback FPS offers 1, 2, 5, 10, 15, 20, 30, 1000 (default 10).
-QTimer never uses header or timestamp-derived experimental frame rates. Playback
-waits for a loaded frame before advancing and stops at the end; slow storage
-can make effective playback slower than the chosen review speed.
+## Bookmarks and ViewerSession
 
-Metadata shows only core fields and current frame index, raw TIME64 and relative
-timestamp. Time comes from `FrameResult`, never index/header fps. The tested
-Cine still reports 8146 versus approximately 4073.320013 fps and
-TIMING_MISMATCH_UNRESOLVED. Software regression and UI smoke tests do not resolve
-physical timing validity. No optical feature is automatically assigned phase
-identity or classified as puffing/micro-explosion. No physical volume is computed.
+B bookmarks the current frame; the Annotation menu offers bookmark notes/tags and
+session notes. Double-click a bookmark to navigate. Bookmarks are navigation aids,
+not Object annotations or Ground Truth.
 
-## Open taxonomy and geometry
+Ctrl+S saves ViewerSession, normally under `outputs/viewer_sessions/`. Ctrl+L
+loads it and asks for the matching Cine when needed. It retains last frame,
+bookmarks, notes, display and playback/view preferences, without annotation records.
+Cine filename/size/count checks are not a whole-file hash. Reopening recalculates
+the Cine reference rather than trusting an old saved gain against changed input.
 
-`configs/annotations/default_taxonomy.json` contains starting examples only.
-`AnnotationLabel.label_id` is an arbitrary stable string, independent of the
-scientific `ObjectType` enum. `display_name`, group, enabled, allowed geometry
-types and attributes are configurable. Add labels and restart; alternatively
-pass `--taxonomy`. Tests load `experimental_feature_x`, which has no dedicated
-UI code. Disabled labels are not offered for selection.
+Unsaved session notes/bookmarks do not have AnnotationDocument dirty protection;
+save them explicitly. [Annotation saving](annotation_editor.md#saving-history-and-recovery)
+is separate.
 
-All persisted geometry uses **image pixel coordinates**, top-left origin,
-x = column, y = row, with subpixel values allowed. Never persist widget/zoom
-coordinates. Supported schema vocabulary:
+## Portable Review Mode
 
-| Type | Geometry convention | v1 read-only rendering |
-| --- | --- | --- |
-| point | `{"point": [x, y]}` | Yes |
-| bbox | `{"bbox": [x, y, width, height]}` | Yes |
-| polygon | `{"points": [[x, y], ...]}` | Yes |
-| polyline | `{"points": [[x, y], ...]}` | Future |
-| ellipse | `{"center": [x, y], "radii": [rx, ry], "rotation_deg": 0}` | Future |
-| mask | JSON descriptor, e.g. `{"encoding": "external", "relative_path": "masks/example.png"}` | Future |
-| keypoints | `{"points": [{"name": "tip", "x": 1, "y": 2, "visible": true}]}` | Future |
+File → Open Review Package… opens PNG-backed frames, with a visible mode title and
+available-frame count. Sparse target/context markers are distinct from human-work
+markers. Missing frames produce a message, not a black/forged frame. Single-step
+playback follows available frames, so it must not be interpreted as a complete
+experimental sequence. Use [review instructions](portable_review_package.md).
 
-Schema accepts JSON geometry and validates type/finite serialization; full
-geometry topology and optical validity validation belong to future editors.
-The OverlayManager dispatches by geometry renderer registry, never label/model
-name. Canvas consumes AnnotationLayers; future mask renderers can be registered.
-AnnotationTool/ToolRegistry now register Select, Point, BBox and Polygon tools.
-The editor adds separate handles to the base renderer for point dragging,
-bbox corner resize and polygon vertex movement. Actual QUndoStack commands
-create immutable derivatives and update active IDs. Ellipse, polyline, mask-brush
-and keypoint tools remain future extensions.
+## Implementation and Limits
 
-## Layers, provenance and human review
+CineController serializes reader/cache work and rejects stale requests. Cached
+arrays are read-only; independent display arrays become QImage. Qt belongs to
+UI, not the annotation/Cine data contracts. Raw grayscale, Ref90, raw export and
+TIME64 boundaries are tested, but not every Phantom variant is validated.
+No inference, tracking, scientific measurement, mask brush or automatic event
+classification is exposed as a finished Viewer feature.
 
-Layer roles include prediction, manual, reviewed, ground_truth, measurement and
-auxiliary. UI has visible and locked toggles, current-frame items/count and
-selected taxonomy label. Locked/hidden layers cannot be edited or deactivated.
-Drawing targets an unlocked Manual or Reviewed layer. Prediction and Ground Truth
-start locked; editing an explicitly unlocked prediction creates a Reviewed
-derivative and preserves the original record.
-
-Future model-assisted workflow: AI prediction → Prediction Layer → human review →
-Accept / Edit / Reject → Reviewed Layer → Ground Truth.
-
-AnnotationDocument owns active IDs and the append-only AnnotationStore.
-AnnotationStore owns deep copies and disallows replacement of existing IDs.
-Review creates a new record with `derived_from`, reviewer, decision, timestamps
-and a new ID. Original model_id/confidence/geometry remain in the source record;
-manual derivatives do not pretend to have a model confidence. This permits
-model error/correction and hard-case comparison. Stored records returned to
-callers are copies. Direct dataclass objects are transport values, not immutable
-database objects; downstream persistence/editors must use the store contract.
-
-PredictionProvider defines `predict(cine_id, frame_index, image) -> AnnotationLayer`.
-Future YOLOAdapter/UNetAdapter must provide source/model provenance, preserve raw
-images and feed a prediction layer. No Torch/Ultralytics imports or packages are
-introduced. No model prediction commands are exposed as completed functionality.
-Manual point/bbox/polygon editing is provided by the current Annotation Editor update.
-
-## Bookmarks, sessions and export
-
-B adds a bookmark for the currently displayed frame. Annotation menu also
-supports arbitrary note/tags and session notes. Bookmark is a navigation aid,
-not segmentation ground truth. Double-click to navigate to its frame.
-
-Save Session As defaults to `outputs/viewer_sessions/<cine_stem>.json`. Portable
-JSON includes filename, size, frame count, last displayed frame, bookmarks with
-raw/relative timestamps, notes, review playback setting and optional relative
-layer references. Explicit local_only data is excluded from portable saves.
-Loading asks the user to locate the Cine when necessary and checks filename,
-size and frame count. It does not depend on an absolute machine path. Identity
-checks do not establish byte-identical content; automatic full-file hashing is
-intentionally absent. Annotation content uses a separate AnnotationDocument
-JSON and is not embedded in viewer sessions. Non-JSON session destinations
-are rejected to prevent overwriting a Cine.
-
-Ctrl+O opens, Ctrl+E exports one displayed raw frame, Ctrl+S saves session,
-Ctrl+L loads session, Ctrl+Q exits. File dialogs use Qt for consistent behavior
-across platforms. PNG default name is `<cine_stem>_frame_<index:06d>.png`, under
-ignored `outputs/viewer_frames/`. uint8 grayscale export is pixel-exact and is
-verified by reopening the PNG. There is no automatic bulk export or hashing.
-Unsaved sessions/bookmarks are currently in memory; save ViewerSession before
-changing Cine or closing the app. Annotation documents have their own Save /
-Discard / Cancel protection, 30-second autosave and atomic saving. These controls
-do not imply autosave/dirty protection for ViewerSession bookmarks or notes.
-
-## Validation and current limits
-
-Pure annotation/store/session tests do not require Qt. UI tests use
-`QT_QPA_PLATFORM=offscreen`. Real tests run only with `DROPLET_VISION_TEST_CINE`
-set, including frame 0, middle/requested 16098, last frame, PNG equality and
-close/reopen. File size/mtime are checked unchanged. Logs and local UI smoke
-artifacts are in ignored `outputs/viewer_smoke/`.
-
-Validated scope is one supplied monochrome Cine and synthetic UI geometries;
-other cameras/packed/color formats require broader validation. Mask editing,
-sampling, dataset export, model inference and scientific
-measurement/event analysis remain future work. Default taxonomy discovery
-currently assumes a source checkout; distributing configs in a wheel is future
-packaging work. UI shutdown waits for the current reader operation; there is no
-hard cancellation of a blocked filesystem call.
-
-## Workstation layout v1.2 (working tree for review)
-
-Left: **Image and display**, a scrollable dock with Image information, Timing
-information, Camera information, Current frame and Display. Metadata uses selectable
-label/value rows. Raw TIME64 stays a complete integer; elapsed time uses nine decimal
-places and the existing TIME64 policy. Ref90 advanced reference/provenance is collapsed
-under Advanced display information. Only controls for the selected display mode appear.
-The primary name is **Photometric Normalization (Ref90)** / **亮度标准化（Ref90）**.
-Internal `photometric_ref90_v1`, preset values and Cine-locked gain are unchanged.
-
-Center: image canvas. Right: **Annotation workspace**, a scrollable dock containing
-Taxonomy, Annotation tools, Tool settings, Current frame annotations and Layers.
-Select/Polygon/Wand/BBox/Point buttons share the existing exclusive actions and
-keyboard shortcuts. Polygon settings show live vertex count and completion/cancel
-controls; Select shows the current record and vertex; Wand shows only its existing
-preview controls. Queue remains an independent dock. Bookmarks have their own dock
-available from View, so they do not crowd the annotation workspace.
-
-Selecting a label cancels unfinished drawing, checks `allowed_geometry_types` and
-restores its last compatible drawing tool in this window; otherwise the priority is
-polygon, magic_wand, bbox, point. This is generic taxonomy behavior, without hardcoded
-label IDs. Thus first selecting parent_droplet activates Polygon. Labels with only
-unsupported geometry keep drawing disabled with an explanatory message. A locked or
-hidden layer still blocks drawing. Clicking a frame annotation selects it and activates
-Select for editing. Language preferences retain the existing restart-to-apply behavior.
-
-**Frame step** 1/10/100/1000 affects only Previous/Next transport buttons. Fixed keys
-remain Left/Right ±1, Shift+Left/Right ±10, PgUp/PgDown ±100; Ctrl+PgUp/PgDown add ±1000.
-All destinations clamp. No Fast Scan mode is implemented.
-
-Following the user's revised requirement, **Review playback FPS also offers 1000**.
-This sets a 1 ms target timer interval; it does not guarantee 1000 rendered frames per
-second. The worker and rendering throughput limit actual speed. The existing playback
-loop waits for the current requested frame and advances by exactly one frame, regardless
-of Frame step. The selection is saved/restored in ViewerSession as review_playback_fps.
-Neither this UI rate nor the frame-step setting determines experimental time.
+Related: [Editor](annotation_editor.md) · [Cine Reader](cine_reader.md) · [Index](README.md).

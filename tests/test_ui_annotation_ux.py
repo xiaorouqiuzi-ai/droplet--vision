@@ -153,7 +153,9 @@ class LocalizationTests(unittest.TestCase):
                 stable=label.data(Qt.ItemDataRole.UserRole)
                 self.assertEqual(label.text(),'父液滴')
                 with patch.object(QMessageBox,'information') as notice:
-                    window.change_language('en_US'); notice.assert_called_once()
+                    window.change_language('en_US'); notice.assert_not_called()
+                self.assertIn('File',[a.text() for a in window.menuBar().actions()])
+                self.assertEqual(window.annotation_panel.labels.item(0).data(Qt.ItemDataRole.UserRole),stable)
                 window.close()
                 self.assertEqual(i18n.preferred_language(QSettings(str(Path(folder)/'prefs.ini'),QSettings.Format.IniFormat)),'en_US')
                 window=MainWindow()

@@ -89,11 +89,12 @@ class LayoutTests(unittest.TestCase):
         self.assertTrue(self.editor.tool_buttons['polygon'].isChecked())
         self.assertIn('当前标签：父液滴', self.window.statusBar().currentMessage())
         self.assertIn('parent_droplet', self.window.annotation_panel.selected.text())
-        self.editor.tool_buttons['bbox'].click()
+        self.assertNotIn('bbox', self.editor.tool_buttons)
+        self.editor.tool_buttons['magic_wand'].click()
         self.label('internal_cavity_candidate')
         self.editor.tool_buttons['point'].click()
         self.label('parent_droplet')
-        self.assertEqual(self.editor.tool_key, 'bbox')
+        self.assertEqual(self.editor.tool_key, 'magic_wand')
         self.assertFalse(self.editor.actions['point'].isEnabled())
         self.label('internal_cavity_candidate')
         self.assertEqual(self.editor.tool_key, 'point')
@@ -106,7 +107,9 @@ class LayoutTests(unittest.TestCase):
         self.editor.tool.mouse_press([100, 20])
         self.assertIn('2', settings.vertex_count.text())
         self.editor.tool.mouse_press([100,100])
-        self.editor.tool.commit()
+        self.editor.tool.commit()  # Close draft.
+        self.assertFalse(self.editor.document.active_records())
+        self.editor.tool.commit()  # Confirm.
         self.assertEqual(settings.vertex_count.text(), '当前节点数：0')
         self.editor.undo_stack.undo()
         self.assertFalse(self.editor.wand_panel.isVisible())
@@ -125,18 +128,16 @@ class LayoutTests(unittest.TestCase):
 
     def test_thousand_step_clamp_fixed_shortcuts_and_playback_are_independent(self):
         window = self.window
-        combo = window.transport.frame_step
-        self.assertEqual([combo.itemData(i) for i in range(combo.count())], [1,10,100,1000])
-        combo.setCurrentIndex(3)
-        window.transport.next.click()
+        self.assertEqual(list(window.transport.jump_buttons), [-1000,-100,-10,-1,1,10,100,1000])
+        window.transport.jump_buttons[1000].click()
         wait_for(lambda: window.current_record.frame_index == 1000)
-        window.transport.previous.click()
+        window.transport.jump_buttons[-1000].click()
         wait_for(lambda: window.current_record.frame_index == 0)
-        window.transport.previous.click()
+        window.transport.jump_buttons[-1000].click()
         wait_for(lambda: window.current_record.frame_index == 0)
         window.navigate(3100)
         wait_for(lambda: window.current_record.frame_index == 3100)
-        window.transport.next.click()
+        window.transport.jump_buttons[1000].click()
         wait_for(lambda: window.current_record.frame_index == 3200)
         window.activateWindow()
         window.canvas.setFocus()
@@ -153,21 +154,19 @@ class LayoutTests(unittest.TestCase):
         wait_for(lambda: window.current_record.frame_index == 3089)
         window.transport.fps.setCurrentText('20')
         self.assertEqual(window.playback.interval(), 50)
-        self.assertEqual(combo.currentData(), 1000)
-        self.assertEqual([window.transport.fps.itemText(i) for i in range(window.transport.fps.count())], ['1','2','5','10','15','20','30','1000'])
+        self.assertEqual([window.transport.fps.itemText(i) for i in range(window.transport.fps.count())], ['1','2','5','10','15','20','30','60','120','240','500','1000'])
         window._tick()
         wait_for(lambda: window.current_record.frame_index == 3090)
 
     def test_1000_review_fps_single_frame_ticks_and_session_roundtrip(self):
         from droplet_vision.annotations import ViewerSession
         window = self.window
-        window.transport.frame_step.setCurrentIndex(3)
         window.transport.fps.setCurrentText('1000')
         self.assertEqual(window.playback.interval(), 1)
         self.assertEqual(window.controller.state.playback_fps, 1000)
         window._tick()
         wait_for(lambda: window.current_record.frame_index == 1)
-        self.assertEqual(window.transport.frame_step.currentData(), 1000)
+        self.assertIn(1000, window.transport.jump_buttons)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)/'session.json'
             window.save_session(path)
@@ -197,7 +196,7 @@ class LayoutTests(unittest.TestCase):
             english.display_panel.show_photometric()
             self.assertEqual(english.display_panel.mode.currentText(), 'Photometric Normalization (Ref90)')
             self.assertEqual(english.annotation_dock.windowTitle(), 'Annotation workspace')
-            self.assertEqual(english.transport.frame_step.itemText(3), '1000 frames')
+            self.assertEqual(english.transport.jump_buttons[1000].text(), '+1000')
         finally:
             english.close()
 
@@ -220,14 +219,13 @@ class RealLayoutTests(unittest.TestCase):
             window.editor.cancel()
             window.editor.tool_buttons['magic_wand'].click()
             self.assertTrue(window.editor.tool_settings.pages['magic_wand'].isVisibleTo(window))
-            window.transport.frame_step.setCurrentIndex(3)
-            window.transport.next.click()
+            window.transport.jump_buttons[1000].click()
             expected = min(1000, window.metadata.frame_count-1)
             wait_for(lambda: window.current_record.frame_index == expected)
             for key, expected_text in (('frame_index',str(expected)), ('raw_time64',str(window.current_record.timestamp_time64))):
                 self.assertEqual(window.metadata_panel.values[key].text(), expected_text)
             summary = {key: value.text() for key,value in window.metadata_panel.values.items()}
-            window.transport.previous.click()
+            window.transport.jump_buttons[-1000].click()
             wait_for(lambda: window.current_record.frame_index == 0)
             window.transport.fps.setCurrentText('1000')
             window.toggle_play()
@@ -236,7 +234,7 @@ class RealLayoutTests(unittest.TestCase):
             self.assertLess(window.current_record.frame_index, 1000)
             summary['review_fps'] = window.controller.state.playback_fps
             summary['playback_observed_frame'] = window.current_record.frame_index
-            summary['frame_step'] = window.transport.frame_step.currentData()
+            summary['frame_jump'] = 1000
             summary['display_name'] = window.display_panel.mode.currentText()
             summary['preset_id'] = window.controller.photometric.preset_id
             output = Path('outputs/viewer_smoke/layout_v1_2')

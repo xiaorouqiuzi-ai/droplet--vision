@@ -10,6 +10,7 @@ from uuid import uuid4
 from .geometry import validate_geometry
 from .schema import AnnotationRecord, _json_copy, _now
 from .store import AnnotationStore
+from .frame_state import FrameStateRecord
 
 
 class AnnotationDocument:
@@ -34,6 +35,9 @@ class AnnotationDocument:
         self._active = set()
         self.record_layers = {}
         self.history = []
+        self._frame_states = {}
+        self._active_frame_states = {}
+        self.scheme = {}
         self._revision = self._saved_revision = 0
 
     @property
@@ -98,7 +102,41 @@ class AnnotationDocument:
                 and (frame_index is None or r.frame_index == frame_index)]
 
     def annotated_frames(self):
-        return sorted({r.frame_index for r in self.active_records()})
+        return sorted({r.frame_index for r in self.active_records()} | set(self._active_frame_states))
+
+    @property
+    def frame_state_records(self):
+        return tuple(self._frame_states.values())
+
+    @property
+    def active_frame_state_records(self):
+        return dict(self._active_frame_states)
+
+    def frame_state(self, frame_index):
+        return self._frame_states.get(self._active_frame_states.get(frame_index))
+
+    def add_frame_state(self, record):
+        if (record.record_id in self._frame_states or record.cine_id != self.cine_id
+                or not 0 <= record.frame_index < self.frame_count):
+            raise ValueError('Invalid or duplicate frame state identity')
+        if record.derived_from is not None:
+            parent = self._frame_states.get(record.derived_from)
+            if parent is None or parent.frame_index != record.frame_index:
+                raise ValueError('Invalid frame state history')
+        self._frame_states[record.record_id] = record
+        self._touch('add_frame_state', record_id=record.record_id)
+
+    def activate_frame_state(self, frame_index, record_id):
+        if type(frame_index) is not int or not 0 <= frame_index < self.frame_count:
+            raise ValueError('Invalid frame state frame index')
+        if record_id is None:
+            self._active_frame_states.pop(frame_index, None)
+        else:
+            record = self._frame_states.get(record_id)
+            if record is None or record.frame_index != frame_index:
+                raise ValueError('Invalid active frame state pointer')
+            self._active_frame_states[frame_index] = record_id
+        self._touch('active_frame_state', frame_index=frame_index, record_id=record_id)
 
     def matches_cine(self, filename, size, frame_count, width, height):
         return (self.cine_filename, self.cine_file_size, self.frame_count, self.width, self.height) == (
@@ -114,6 +152,9 @@ class AnnotationDocument:
             "active_annotation_ids": sorted(self._active),
             "deactivated_annotation_ids": sorted(self.deactivated_annotation_ids),
             "record_layers": self.record_layers,
+            "scheme": self.scheme,
+            "frame_state_records": [r.to_dict() for r in self.frame_state_records],
+            "active_frame_state_records": {str(k): v for k, v in self._active_frame_states.items()},
             "records": [r.to_dict() for r in self.records.records()], "history": self.history})
 
     @classmethod
@@ -150,7 +191,21 @@ class AnnotationDocument:
         doc.record_layers = layers
         doc.document_id = value["document_id"]
         doc.created_at, doc.updated_at = value["created_at"], value["updated_at"]
-        doc.history = value.get("history", [])
+        doc.history = []
+        doc.scheme = value.get('scheme', {})
+        if doc.scheme:
+            from .scheme import validate_scheme
+            doc.scheme = validate_scheme(doc.scheme)
+        # Optional extensions retain compatibility with documents written before v1.3.
+        for row in value.get('frame_state_records', []):
+            doc.add_frame_state(FrameStateRecord.from_dict(row))
+        for index, record_id in value.get('active_frame_state_records', {}).items():
+            if str(int(index)) != index or not isinstance(record_id, str) or not record_id:
+                raise ValueError('Noncanonical frame state index')
+            doc.activate_frame_state(int(index), record_id)
+        doc.history = value.get('history', [])
+        doc.updated_at = value['updated_at']
+        doc._revision = doc._saved_revision = 0
         return doc
 
     def save(self, path, mark_saved=True):
