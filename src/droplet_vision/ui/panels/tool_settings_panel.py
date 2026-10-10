@@ -6,8 +6,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBu
 class ToolSettingsPanel(QWidget):
     HINTS = {
         'select': 'Drag solid squares to move vertices; click or drag hollow squares to insert. Right-click a vertex to delete.',
-        'polygon': 'Click to add vertices. Click the first vertex to close; adjust the draft, then Confirm. Esc cancels.',
-        'magic_wand': 'Click a region in the image, then adjust and confirm the preview.',
+        'polygon': 'Click to add vertices; click the first vertex to close. Space / Enter: Confirm closed draft. Esc: Cancel.',
+        'magic_wand': 'Click a region in the image, then adjust the closed draft. Space / Enter: Confirm. Esc: Cancel.',
         'bbox': 'Press and drag on the image, then release to create a bounding box.',
         'point': 'Click the image to create a point.',
     }

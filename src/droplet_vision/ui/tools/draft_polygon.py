@@ -142,7 +142,7 @@ class DraftPolygonEditor:
         self.cursor = None
         self.remember(before)
         self.render()
-        self.editor.message(tr('Closed draft: adjust vertices, then Confirm.'))
+        self.editor.message(tr('Closed draft: adjust vertices, then Space / Enter: Confirm. Esc: Cancel.'))
         return True
 
     def delete(self, vertex=None):

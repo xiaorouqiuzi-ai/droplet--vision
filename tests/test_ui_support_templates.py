@@ -122,7 +122,7 @@ class SupportTemplateUiTests(unittest.TestCase):
         event=QContextMenuEvent(QContextMenuEvent.Reason.Mouse,position,
                                self.list.items.viewport().mapToGlobal(position))
         self.app.sendEvent(self.list.items.viewport(),event)
-        self.assertEqual(opened,['隐藏此模板'])
+        self.assertEqual(opened,['隐藏此模板', '取消全 Cine 应用', '重置本帧位置'])
         self.assertEqual(self.editor.hidden_ids(),before)
 
     def test_local_override_delete_undo_and_template_isolation(self):

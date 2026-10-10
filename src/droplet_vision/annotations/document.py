@@ -12,6 +12,7 @@ from .schema import AnnotationRecord, _json_copy, _now
 from .store import AnnotationStore
 from .frame_state import FrameStateRecord
 from .support_translation import translation, translated
+from .support_scope import SupportTemplateScope
 
 
 class AnnotationDocument:
@@ -40,6 +41,8 @@ class AnnotationDocument:
         self._active_frame_states = {}
         self.scheme = {}
         self._cine_templates = {}
+        self._package_templates = {}
+        self.support_scope = SupportTemplateScope()
         self._revision = self._saved_revision = 0
 
     @property
@@ -107,23 +110,51 @@ class AnnotationDocument:
 
     def annotated_frames(self):
         return sorted({r.frame_index for r in self.active_records()} | set(self._active_frame_states)
-                      | {int(key) for key in self._cine_templates.get('support_structure', {}).get('frame_overrides', {})})
+                      | {int(key) for key in self.support_templates.get('support_structure', {}).get('frame_overrides', {})})
 
     @property
     def cine_templates(self):
         return _json_copy(self._cine_templates)
 
-    def _validate_templates(self, value):
+    @property
+    def package_templates(self):
+        return _json_copy(self._package_templates)
+
+    @property
+    def support_templates(self):
+        return self.package_templates if self.support_scope.kind == 'package' else self.cine_templates
+
+    @property
+    def support_enabled_key(self):
+        return self.support_scope.enabled_key
+
+    def bind_package_scope(self, frames):
+        scope = SupportTemplateScope('package', frozenset(frames))
+        self._validate_templates(self.package_templates, scope)
+        self.support_scope = scope
+
+    def replace_support_templates(self, value):
+        value = self._validate_templates(value, self.support_scope)
+        if self.support_scope.kind == 'package':
+            self._package_templates = value
+            self._touch('package_templates', templates=self.package_templates)
+        else:
+            self.replace_cine_templates(value)
+
+    def _validate_templates(self, value, scope=None):
+        scope = scope or SupportTemplateScope()
         value = _json_copy(value)
         if not isinstance(value, dict) or set(value) - {'support_structure'}:
             raise ValueError('Invalid Cine template metadata')
         for template in value.values():
             if not isinstance(template, dict):
                 raise ValueError('Invalid support rod template')
-            if type(template.get('apply_entire_cine', False)) is not bool:
-                raise ValueError('apply_entire_cine must be boolean')
+            if ('apply_entire_cine' if scope.kind == 'package' else 'enabled') in template:
+                raise ValueError('Support template scope fields cannot be mixed')
+            if type(template.get(scope.enabled_key, False)) is not bool:
+                raise ValueError('Template enabled state must be boolean')
             frame, ids = template.get('source_frame_index'), template.get('annotation_ids')
-            if (type(frame) is not int or not 0 <= frame < self.frame_count
+            if (not scope.contains(frame, self.frame_count)
                     or not isinstance(ids, list) or not ids
                     or not all(isinstance(key, str) for key in ids) or len(set(ids)) != len(ids)):
                 raise ValueError('Invalid support rod template source')
@@ -139,7 +170,7 @@ class AnnotationDocument:
                 raise ValueError('Invalid support frame overrides')
             for key, override in overrides.items():
                 if (not isinstance(key, str) or not key.isascii() or not key.isdigit()
-                        or str(int(key)) != key or not 0 <= int(key) < self.frame_count
+                        or str(int(key)) != key or not scope.contains(int(key), self.frame_count)
                         or not isinstance(override, dict) or set(override) != {'translation'}):
                     raise ValueError('Invalid support override frame')
                 offset = translation(override['translation'])
@@ -158,23 +189,24 @@ class AnnotationDocument:
             raise ValueError('Select confirmed active support rod polygons')
         frame = self.records.get(ids[0]).frame_index
         return self._validate_templates({'support_structure': {
-            'source_frame_index': frame, 'annotation_ids': ids}})
+            'source_frame_index': frame, 'annotation_ids': ids}}, self.support_scope)
 
     def support_copies(self, frame_index):
         return [r for r in self.active_records(frame_index)
                 if r.label_id == 'support_structure'
                 and r.attributes.get('creation_tool') in (
-                    'cine_support_template', 'cine_support_template_override', 'cine_template_projection')]
+                    'cine_support_template', 'cine_support_template_override', 'cine_template_projection',
+                    'package_support_template_override', 'package_template_projection')]
 
     def support_translation(self, frame_index):
-        return _json_copy(self._cine_templates.get('support_structure', {}).get('frame_overrides', {}).get(
+        return _json_copy(self.support_templates.get('support_structure', {}).get('frame_overrides', {}).get(
             str(frame_index), {}).get('translation', {'dx': 0.0, 'dy': 0.0}))
 
     def with_support_translation(self, frame_index, offset):
-        if type(frame_index) is not int or not 0 <= frame_index < self.frame_count:
+        if not self.support_scope.contains(frame_index, self.frame_count):
             raise ValueError('Invalid translation frame')
         offset = translation(offset)
-        value = self.cine_templates
+        value = self.support_templates
         if 'support_structure' not in value:
             raise ValueError('No Cine support template')
         template = value['support_structure']
@@ -185,10 +217,10 @@ class AnnotationDocument:
             overrides.pop(str(frame_index), None)
         if not overrides:
             template.pop('frame_overrides', None)
-        return self._validate_templates(value)
+        return self._validate_templates(value, self.support_scope)
 
     def support_source_id(self, record):
-        ids = self._cine_templates.get('support_structure', {}).get('annotation_ids', [])
+        ids = self.support_templates.get('support_structure', {}).get('annotation_ids', [])
         if record.label_id != 'support_structure' or record.geometry_type != 'polygon':
             return None
         source_id = record.attributes.get('template_source_annotation_id')
@@ -202,13 +234,13 @@ class AnnotationDocument:
         return None
 
     def support_full_overrides(self, frame_index):
-        ids = self._cine_templates.get('support_structure', {}).get('annotation_ids', [])
+        ids = self.support_templates.get('support_structure', {}).get('annotation_ids', [])
         return [r for r in self.active_records(frame_index)
                 if r.annotation_id not in ids and self.support_source_id(r) is not None]
 
     def support_suppressed_ids(self, frame_index):
-        template = self._cine_templates.get('support_structure', {})
-        if not template.get('apply_entire_cine', False):
+        template = self.support_templates.get('support_structure', {})
+        if not self.support_scope.contains(frame_index, self.frame_count) or not template.get(self.support_enabled_key, False):
             return set()
         offset = self.support_translation(frame_index)
         if offset['dx'] or offset['dy']:
@@ -216,7 +248,7 @@ class AnnotationDocument:
         return {self.support_source_id(r) for r in self.support_full_overrides(frame_index)}
 
     def support_group(self, frame_index):
-        if not self._cine_templates.get('support_structure', {}).get('apply_entire_cine', False):
+        if not self.support_scope.contains(frame_index, self.frame_count) or not self.support_templates.get('support_structure', {}).get(self.support_enabled_key, False):
             return []
         suppressed = self.support_suppressed_ids(frame_index)
         return [r for r in self.active_records(frame_index)
@@ -229,6 +261,8 @@ class AnnotationDocument:
         stable across frames so session visibility can hide one template rod.
         """
         from uuid import uuid5, NAMESPACE_URL
+        if not self.support_scope.contains(frame_index, self.frame_count):
+            raise ValueError('Projection frame is outside the support-template scope')
         source = self.records.get(source_id)
         offset = translation(offset if offset is not None else self.support_translation(frame_index))
         moved = bool(offset['dx'] or offset['dy'])
@@ -238,20 +272,22 @@ class AnnotationDocument:
         row = AnnotationRecord(self.cine_id, frame_index, 'support_structure', 'polygon',
                                translated(source.geometry, offset), source='imported' if package else 'manual',
                                annotation_id=(str(uuid5(NAMESPACE_URL, f'{self.document_id}:{source_id}:{frame_index}:support-projection{suffix}'))
-                                              if package else 'cine-template:' + source_id),
+                                              if package else self.support_scope.kind + '-template:' + source_id),
                                created_at=source.created_at, updated_at=source.updated_at,
-                               attributes={'creation_tool': 'cine_template_projection',
+                               attributes={'creation_tool': self.support_scope.kind + '_template_projection',
                                            'template_source_annotation_id': source_id,
                                            'template_source_frame_index': source.frame_index,
                                            'instance_name': source.attributes.get('instance_name', '')})
+        if self.support_scope.kind == 'package':
+            row.attributes['template_scope'] = 'package'
         if moved:
             row.attributes['frame_translation'] = offset
         self.validate_record(row)
         return row
 
     def support_projections(self, frame_index, package=False):
-        template = self._cine_templates.get('support_structure', {})
-        if not template.get('apply_entire_cine', False):
+        template = self.support_templates.get('support_structure', {})
+        if not self.support_scope.contains(frame_index, self.frame_count) or not template.get(self.support_enabled_key, False):
             return []
         active = self.active_records(frame_index)
         replaced = {self.support_source_id(r) for r in self.support_full_overrides(frame_index)}
@@ -339,6 +375,7 @@ class AnnotationDocument:
             "record_layers": self.record_layers,
             "scheme": self.scheme,
             **({'cine_templates': self.cine_templates} if self._cine_templates else {}),
+            **({'package_templates': self.package_templates} if self._package_templates else {}),
             "frame_state_records": [r.to_dict() for r in self.frame_state_records],
             "active_frame_state_records": {str(k): v for k, v in self._active_frame_states.items()},
             "records": [r.to_dict() for r in self.records.records()], "history": self.history})
@@ -376,6 +413,8 @@ class AnnotationDocument:
         doc._active = set(active)
         doc.record_layers = layers
         doc._cine_templates = doc._validate_templates(value.get('cine_templates', {}))
+        doc._package_templates = doc._validate_templates(value.get('package_templates', {}),
+            SupportTemplateScope('package', range(doc.frame_count)))
         doc.document_id = value["document_id"]
         doc.created_at, doc.updated_at = value["created_at"], value["updated_at"]
         doc.history = []

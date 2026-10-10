@@ -121,6 +121,8 @@ class ReviewPackage:
         self.manifest, self.scheme = manifest, scheme
         self.documents, self.bases, self.frames = documents, bases, frames
         self.review = review or {'decisions': [], 'frame_notes': {}, 'reviewed_frames': [], 'record_provenance': {}}
+        for cine, document in documents.items():
+            document.bind_package_scope(row['frame_index'] for row in manifest['frames'] if row['cine_id'] == cine)
         self.path = None
         self.saved_fingerprint = None
 
@@ -129,7 +131,35 @@ class ReviewPackage:
         return self.saved_fingerprint != self.fingerprint()
 
     def fingerprint(self):
-        return digest(encode([self.manifest, self.review, {k:v.to_dict() for k,v in self.documents.items()}]))
+        return digest(encode([self.work_fingerprint(), self.review.get('review_completed_at')]))
+
+    def work_fingerprint(self):
+        """Effective work, excluding Undo's retained inactive history/audit entries.
+
+        History remains serialized in full on Save. Display state is not package
+        data. Automatically generated review lifecycle fields are not user edits.
+        Explicit decisions, notes and reviewed-frame progress are user edits.
+        """
+        docs, active_ids = {}, set()
+        for cine, document in self.documents.items():
+            value = document.to_dict()
+            objects = set(value['active_annotation_ids'])
+            states = set(value['active_frame_state_records'].values())
+            active_ids.update(objects | states)
+            value['records'] = sorted((r for r in value['records'] if r['annotation_id'] in objects),
+                                      key=lambda r: r['annotation_id'])
+            value['frame_state_records'] = sorted((r for r in value['frame_state_records'] if r['record_id'] in states),
+                                                  key=lambda r: r['record_id'])
+            value['record_layers'] = {k:v for k,v in value['record_layers'].items() if k in objects}
+            for key in ('deactivated_annotation_ids', 'history', 'updated_at'):
+                value.pop(key, None)
+            docs[cine] = value
+        manifest = {k:v for k,v in self.manifest.items() if k not in ('package_status', 'reviewed_with_app_version')}
+        review = {k:v for k,v in self.review.items() if k not in (
+            'reviewer', 'review_started_at', 'application_version_reviewed', 'review_completed_at', 'record_provenance')}
+        active_ids.update(d['record_id'] for d in self.review['decisions'])
+        review['record_provenance'] = {k:v for k,v in self.review.get('record_provenance', {}).items() if k in active_ids}
+        return digest(encode([manifest, self.scheme, review, docs]))
 
     def start_review(self, reviewer='', version='unknown'):
         self.review['reviewer'] = {'display_name': reviewer}
@@ -164,14 +194,17 @@ class ReviewPackage:
         result['checksums/sha256.json'] = encode({name:digest(data) for name,data in result.items()})
         return result
 
-    def save(self, path, folder=False, mark_saved=True):
+    def save(self, path, folder=False, mark_saved=True, *, checkpoint=None, before_commit=None):
         """Verify a staged container before replacement; preserve old file on failure."""
         path = Path(path).resolve()
         if not folder and path.suffix.lower() not in ('.dvapkg', '.dvrpkg'):
             raise ValueError('Use the .dvapkg extension (.dvrpkg is also supported)')
         if folder and path.exists():
             raise FileExistsError('Folder export requires a new, empty destination name')
+        check = checkpoint or (lambda: None)
+        check()
         payload = self.files()
+        saved_fingerprint = self.fingerprint() if mark_saved else None
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix='.review-', dir=path.parent))
         try:
@@ -179,6 +212,7 @@ class ReviewPackage:
             if folder:
                 staged.mkdir()
                 for name, data in payload.items():
+                    check()
                     target = staged / safe_name(name)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with target.open('xb') as handle:
@@ -189,20 +223,26 @@ class ReviewPackage:
                 with staged.open('xb') as handle:
                     with zipfile.ZipFile(handle, 'w', zipfile.ZIP_DEFLATED) as archive:
                         for name, data in payload.items():
+                            check()
                             archive.writestr(name, data)
                     handle.flush()
                     os.fsync(handle.fileno())
             self._from_files(payload)  # Also validate in-memory state before saving.
             self.open(staged)
+            check()
+            if before_commit is not None:
+                before_commit()
             os.replace(staged, path)
         finally:
             # Only the task-owned temporary directory created above is removed.
-            shutil.rmtree(temporary)
+            # Once replace succeeded, cleanup must not turn a successful save
+            # into a reported failure. Temporary residue can be cleaned later.
+            shutil.rmtree(temporary, ignore_errors=True)
         if mark_saved:
             self.path = path
             for document in self.documents.values():
                 document._saved_revision = document._revision
-            self.saved_fingerprint = self.fingerprint()
+            self.saved_fingerprint = saved_fingerprint
 
     @classmethod
     def open(cls, path):
@@ -340,6 +380,8 @@ class ReviewPackage:
             images[name] = data
         for cine, doc in docs.items():
             indices = {index for cid,index in seen if cid == cine}
+            doc.bind_package_scope(indices)
+            bases[cine].bind_package_scope(indices)
             if not indices or any(r.frame_index not in indices for r in doc.records.records()) or any(r.frame_index not in indices for r in doc.frame_state_records):
                 raise ValueError('Annotation refers to an unbundled frame')
         if 'sampling' in manifest:
@@ -406,6 +448,7 @@ class ReviewPackage:
                     if r.record_id in doc.active_frame_state_records.values()
                     and (r.source == 'manual' or r.review_status in ('accepted', 'edited', 'ground_truth')))
         done.update(index for cine, index in self.review['reviewed_frames'] if cine == cine_id)
+        done.update(int(frame) for frame in doc.package_templates.get('support_structure', {}).get('frame_overrides', {}))
         return len(targets), len(targets & done), len(targets - done)
 
 

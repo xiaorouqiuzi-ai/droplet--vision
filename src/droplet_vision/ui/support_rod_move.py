@@ -34,7 +34,7 @@ class SupportRodMove:
         if not editor.ready or editor.document is None or editor.window.current_record is None:
             return []
         frame = editor.window.current_record.frame_index
-        if self.review:
+        if self.review and not editor.document.support_templates.get('support_structure', {}).get('enabled'):
             return [r for r in editor.document.support_copies(frame) if r.geometry_type == 'polygon']
         return editor.document.support_group(frame)
 
@@ -51,8 +51,8 @@ class SupportRodMove:
 
     def full(self, records):
         doc = self.editor.document
-        source_ids = doc.cine_templates.get('support_structure', {}).get('annotation_ids', [])
-        return self.review or any(r.annotation_id in doc.active_annotation_ids and r.annotation_id not in source_ids for r in records)
+        source_ids = doc.support_templates.get('support_structure', {}).get('annotation_ids', [])
+        return (self.review and not doc.support_templates.get('support_structure', {}).get('enabled')) or any(r.annotation_id in doc.active_annotation_ids and r.annotation_id not in source_ids for r in records)
 
     def clear_handle(self):
         if self.item is not None:
@@ -122,7 +122,7 @@ class SupportRodMove:
                      'offset':editor.document.support_translation(frame), 'delta':{'dx':0.0,'dy':0.0},
                      'center':QPointF(self.item.pos())}
         editor.clear_handles()
-        if frame == editor.document.cine_templates.get('support_structure', {}).get('source_frame_index'):
+        if frame == editor.document.support_templates.get('support_structure', {}).get('source_frame_index'):
             editor.message('This is the template source frame. Moving affects this frame only, not the template.')
         return True
 
@@ -152,12 +152,13 @@ class SupportRodMove:
         self.cancel()
         if delta['dx'] or delta['dy']:
             editor = self.editor
+            editor.window.review_manager.begin_edit()
             if state['full']:
                 self.commit_geometry(state['records'], {r.annotation_id:translated(r.geometry,delta) for r in state['records']})
             else:
                 offset = {key:state['offset'][key]+delta[key] for key in ('dx','dy')}
                 sources = [editor.document.records.get(key) for key in
-                           editor.document.cine_templates['support_structure']['annotation_ids']]
+                           editor.document.support_templates['support_structure']['annotation_ids']]
                 offset = bounded_delta(sources, offset['dx'], offset['dy'], editor.document.width, editor.document.height)
                 editor.undo_stack.push(SetSupportRodTranslationCommand(editor.document,
                     editor.window.current_record.frame_index, offset, editor.changed))
@@ -175,6 +176,7 @@ class SupportRodMove:
         editor = self.editor
         frame = editor.window.current_record.frame_index
         if any(editor.document.support_translation(frame).values()):
+            editor.window.review_manager.begin_edit()
             editor.undo_stack.push(SetSupportRodTranslationCommand(editor.document, frame,
                                    {'dx':0.0,'dy':0.0}, editor.changed))
 
@@ -188,7 +190,7 @@ class SupportRodMove:
         """Consume translation into a complete group in one undo action."""
         editor = self.editor
         doc, frame = editor.document, editor.window.current_record
-        source_ids = doc.cine_templates.get('support_structure', {}).get('annotation_ids', [])
+        source_ids = doc.support_templates.get('support_structure', {}).get('annotation_ids', [])
         rows = []
         for original in records:
             if not editor.can_edit(original):
@@ -203,7 +205,7 @@ class SupportRodMove:
                                           attributes=deepcopy(original.attributes))
                 layer_id = 'manual'
             source_id = doc.support_source_id(original) or original.attributes.get('template_source_annotation_id')
-            record.attributes.update(creation_tool='cine_support_template_override',
+            record.attributes.update(creation_tool=(doc.support_scope.kind if source_ids else 'cine') + '_support_template_override',
                                      template_source_annotation_id=source_id,
                                      template_source_frame_index=(doc.records.get(source_id).frame_index if source_id in doc.record_layers
                                                                   else original.attributes.get('template_source_frame_index')),
@@ -224,7 +226,7 @@ class SupportRodMove:
                 editor.message(str(error))
                 return False
             rows.append((old_id, record, layer_id))
-        templates = doc.cine_templates if self.review else doc.with_support_translation(frame.frame_index, {'dx':0.0,'dy':0.0})
+        templates = doc.support_templates if self.review and not doc.support_templates else doc.with_support_translation(frame.frame_index, {'dx':0.0,'dy':0.0})
         for original, (_, record, _) in zip(records,rows):
             if original.annotation_id == (selected or editor.selected_id):
                 editor.selected_id = record.annotation_id

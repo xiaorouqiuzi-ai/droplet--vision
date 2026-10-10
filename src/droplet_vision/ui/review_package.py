@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 import json
+import os
+import stat
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QThreadPool, QSignalBlocker
@@ -172,7 +174,11 @@ class ReviewCoordinator(QObject):
         self.controller = ReviewController(self)
         self.package = self.provider = self.cine_id = None
         self.completed_revisions = None
+        self.completed_work = self.completion_time = None
+        self.reviewer = ''
+        self.review_started = False
         self.task = None
+        self.batch_window = None
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
         self.panel = QGroupBox(tr('Annotation Package'))
@@ -198,11 +204,14 @@ class ReviewCoordinator(QObject):
         functions = window.menuBar().addMenu(tr('Functions'))
         window.functions_menu = functions
         self.uniform_action = window._action(functions, 'Create Annotation Package from Uniform Cine Sampling...', self.uniform_dialog)
+        self.batch_action = window._action(functions, 'Create Annotation Packages from Folder...', self.batch_dialog)
+        self.batch_action.setToolTip(tr('Recursively sample Cine files into annotation packages while preserving the folder tree.'))
         self.export_action = window._action(functions,'Create Annotation Package from Current Annotations...',self.export_dialog)
         window._action(functions,'Open Annotation Package...',self.open_dialog)
         window._action(functions,'Open Annotation Package Folder...',lambda:self.open_dialog(folder=True))
         self.save_action = window._action(functions,'Save Annotation Package As...',self.save_dialog)
         self.import_action = window._action(functions,'Import Returned Annotation Package...',self.import_dialog)
+        window.transport.save_package.clicked.connect(self.quick_save)
         self.refresh()
 
     @property
@@ -210,6 +219,7 @@ class ReviewCoordinator(QObject):
         return self.package is not None
 
     def refresh(self):
+        self.refresh_save_button()
         self.uniform_action.setEnabled(self.task is None)
         self.save_action.setEnabled(self.active)
         self.export_action.setEnabled(not self.active)
@@ -221,12 +231,31 @@ class ReviewCoordinator(QObject):
             name=self.package.path.name if self.package.path else self.package.manifest['package_id'],
             cine=doc.cine_filename,total=doc.frame_count,available=len(self.provider.available(self.cine_id)),
             status=self.package.manifest['package_status']))
+        self.info.setText(self.info.text() + '\n' + tr('Unsaved changes' if self.dirty else 'Saved'))
         total, done, remaining = self.package.progress(self.cine_id)
         self.info.setText(self.info.text() + '\n' + tr('Targets: {total} | Annotated / reviewed: {done} | Remaining: {remaining}').format(
             total=total, done=done, remaining=remaining))
         self.window.timeline.slider.set_package_markers(self.provider.available(self.cine_id),self.provider.available(self.cine_id,True))
         self.window.display_panel.recalculate_button.setEnabled(False)
         self.window.editor.update_title()
+
+    @property
+    def dirty(self):
+        return self.active and (self.package.dirty or self.window.editor.workflow.notes_pending)
+
+    def refresh_save_button(self):
+        button = self.window.transport.save_package
+        button.setVisible(bool(self.dirty))
+        path = self.package.path if self.active else None
+        direct = path is not None and not path.is_dir() and path.suffix.lower() == '.dvapkg'
+        button.setText(tr('Save Annotation Package' if direct else 'Save as New Annotation Package'))
+        button.setToolTip(tr('Save changes to the currently opened annotation package' if direct
+                            else 'Legacy files and package folders use Save As to preserve the original.'))
+
+    def begin_edit(self):
+        if self.active and not self.review_started:
+            self.package.start_review(self.reviewer, project_metadata()[0])
+            self.review_started = True
 
     def open_dialog(self, checked=False, folder=False):
         path = (QFileDialog.getExistingDirectory(self.window,tr('Open Annotation Package Folder...')) if folder else
@@ -250,7 +279,9 @@ class ReviewCoordinator(QObject):
         self.normal_controller.close()  # Invalidates any pending async Cine result.
         self.previous_scheme = deepcopy(self.window.editor.workflow.scheme)
         self.package, self.provider = package, ReviewFrameProvider(package)
-        self.package.start_review(reviewer,project_metadata()[0])
+        self.reviewer, self.review_started = reviewer, False
+        self.completed_work = package.work_fingerprint() if package.manifest['package_status'] == 'reviewed' else None
+        self.completion_time = package.review.get('review_completed_at')
         self.window.controller = self.controller
         self.window.cine_path = None
         self.window.queue_manager.pending = self.window.queue_manager.current_id = None
@@ -328,6 +359,7 @@ class ReviewCoordinator(QObject):
 
     def prepare_record(self, record):
         if self.active:
+            self.begin_edit()
             self.package.mark_in_review()
             record.attributes.update(self.package.provenance())
             record.reviewer = self.package.provenance()['reviewer']
@@ -336,6 +368,7 @@ class ReviewCoordinator(QObject):
 
     def record_state_provenance(self, record):
         if self.active:
+            self.begin_edit()
             self.package.mark_in_review()
             self.package.review['record_provenance'][record.record_id] = self.package.provenance()
             return replace(record,review_status='edited' if record.derived_from else 'unreviewed')
@@ -349,6 +382,7 @@ class ReviewCoordinator(QObject):
         record = editor.selected_record() if kind == 'object' else editor.document.frame_state(self.controller.state.frame_index)
         if record is None:
             return
+        self.begin_edit()
         key = record.annotation_id if kind == 'object' else record.record_id
         editor.undo_stack.push(DecisionCommand(self,kind,key,status))
 
@@ -357,6 +391,7 @@ class ReviewCoordinator(QObject):
             key = self.cine_id + ':' + str(self.controller.state.frame_index)
             value, ok = QInputDialog.getMultiLineText(self.window,tr('Review note...'),tr('Notes'),self.package.review['frame_notes'].get(key,''))
             if ok:
+                self.begin_edit()
                 self.package.mark_in_review()
                 self.package.review['frame_notes'][key] = value
                 self.refresh()
@@ -365,20 +400,27 @@ class ReviewCoordinator(QObject):
         if self.active:
             key = [self.cine_id,self.controller.state.frame_index]
             if key not in self.package.review['reviewed_frames']:
+                self.begin_edit()
                 self.package.review['reviewed_frames'].append(key)
             self.refresh()
 
     def complete(self):
         if self.active and QMessageBox.question(self.window,tr('Complete review'),tr('Explicitly mark this package reviewed?')) == QMessageBox.StandardButton.Yes:
+            self.begin_edit()
             self.package.manifest['package_status'] = 'reviewed'
             self.package.review['review_completed_at'] = _now()
             self.completed_revisions = {k:d._revision for k,d in self.package.documents.items()}
+            self.completed_work = self.package.work_fingerprint()
+            self.completion_time = self.package.review['review_completed_at']
             self.refresh()
 
     def document_changed(self):
-        if self.active and self.package.manifest['package_status'] == 'reviewed':
-            revisions = {k:d._revision for k,d in self.package.documents.items()}
-            if revisions != self.completed_revisions:
+        if self.active and self.completed_work is not None:
+            if self.package.work_fingerprint() == self.completed_work:
+                self.package.manifest['package_status'] = 'reviewed'
+                if self.completion_time is not None:
+                    self.package.review['review_completed_at'] = self.completion_time
+            else:
                 self.package.mark_in_review()
         if self.active:
             self.refresh()
@@ -398,6 +440,28 @@ class ReviewCoordinator(QObject):
         except Exception as error:
             self.window._error(str(error))
             return False
+
+    def quick_save(self, checked=False):
+        if not self.active:
+            return False
+        path = self.package.path
+        if path is None or path.is_dir() or path.suffix.lower() != '.dvapkg':
+            return self.save_dialog()
+        self.window.editor.workflow.flush_notes()
+        try:
+            mode = path.stat().st_mode
+            if not mode & stat.S_IWRITE or not os.access(path, os.W_OK):
+                self.window._error(tr('This annotation package is read-only. Use Save Annotation Package As...'))
+                self.refresh()
+                return False
+            self.package.save(path)
+        except Exception as error:
+            self.window._error(tr('Annotation package save failed; the original file was not overwritten.') + '\n'
+                               + tr('Use Save Annotation Package As... to save to another location.') + '\n' + str(error))
+            self.refresh()
+            return False
+        self.refresh()
+        return True
 
     def confirm_discard(self):
         self.window.editor.workflow.flush_notes()
@@ -478,6 +542,15 @@ class ReviewCoordinator(QObject):
             self.pool.start(self.task)
         except Exception as error:
             self.window._error(str(error))
+
+    def batch_dialog(self):
+        from .batch_package import BatchPackageDialog
+        if self.batch_window is None or not self.batch_window.isVisible():
+            if self.batch_window is not None:
+                self.batch_window.deleteLater()
+            self.batch_window = BatchPackageDialog(self.window.editor.workflow.scheme, self.window, project_metadata()[0])
+        self.batch_window.show()
+        self.batch_window.raise_()
 
     def uniform_dialog(self):
         if self.task is not None:

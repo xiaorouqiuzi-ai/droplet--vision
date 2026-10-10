@@ -56,6 +56,32 @@ Open the raw-only package from **Functions → Open Annotation Package…**. No 
 or original dataset is needed. Use Polygon, Magic Wand, Point, labels, Frame States,
 Notes, Uncertain and Rename. Save As, close and reopen to continue annotation.
 
+### Quick Save the current package
+
+In Annotation Package Mode, changing annotation data shows **Save Annotation Package /
+保存标注包** at the bottom right of the playback/navigation bar. It is hidden for a
+clean package and in normal Cine mode. Clicking it safely overwrites the currently
+opened single-file `.dvapkg` without a Save As dialog. The application writes and
+fsyncs a staged package beside the destination, regenerates SHA-256 checksums,
+validates the package, then atomically replaces the original. Success clears the
+dirty title marker and hides the button; failure preserves the original and leaves
+the button visible. A read-only file prompts you to use Save As elsewhere.
+
+**Save Annotation Package As…** remains available for a copy, returned work or a
+new version. Legacy `.dvrpkg`, unpacked folders and packages without a file path
+show **Save as New Annotation Package** and use Save As (default `.dvapkg`); this
+first version does not overwrite legacy files or update package directories in place.
+Ctrl+S retains its existing Session behavior; the new button has no shortcut.
+
+Opening a saved package alone is clean. Dirty tracking compares effective active
+objects/states, notes and explicit review decisions/progress. Undo back to the
+saved work hides the button; Redo shows it again. Inactive immutable records and
+audit history remain in memory and are included by any subsequent save, but
+Undo-only history changes do not force a save. Zoom, pan, display mode, visibility,
+language and layout do not mark the package dirty. Pending Notes are flushed before
+saving. Saving does not create annotation revisions, approve Ground Truth or alter
+raw PNGs, TIME64, Scheme IDs or Ref90 provenance.
+
 The full-index timeline remains 0…F−1. Click lower available/target markers or use
 Previous/Next available frame. Unpackaged frames produce a message and retain the
 actual displayed frame and TIME64. The left panel reports target/done/remaining counts.
@@ -203,6 +229,67 @@ validates it, then uses atomic replace. Failure preserves the existing destinati
 Source Cine size/mtime are checked unchanged after export. Checks are not proof
 against malicious edits that preserve file metadata.
 
+## Batch Annotation Package Generation
+
+Choose **Functions → Create Annotation Packages from Folder…** (中文：按文件夹批量创建标注包).
+Select a source dataset folder and a separate output parent, set samples per Cine
+(default **20**) and optional context radius (default **0**), then **Scan**.
+The dialog snapshots the active Annotation Scheme for the entire batch. Scanning
+recursively reads metadata, without decoding images, and previews frame counts,
+relative paths, short files, existing destinations and errors. Click **Start
+creating** to run the job in a worker thread; progress includes current Cine and
+decoded frames, including the extra Ref90 reference read.
+
+The source folder's own name and every relative subdirectory are retained:
+
+```text
+A/B/111.cine      → Packages/A/B/111.dvapkg
+A/C/222.cine      → Packages/A/C/222.dvapkg
+A/B/sub/333.cine  → Packages/A/B/sub/333.dvapkg
+```
+
+Discovery matches `.cine` case-insensitively, including Unicode/space-containing
+paths. Empty directories are not copied. Filesystem links/junctions are not
+followed during discovery. Select a dataset folder rather than a drive root.
+Output inside the source tree, including paths redirected there by links, is
+rejected. Ambiguous Cine names mapping to the same destination are reported as
+failures rather than overwritten.
+
+Each Cine produces one raw-only v2 `.dvapkg`, using the **same uniform sampler and
+package writer** as single-Cine export. For F ≥ N there are exactly N unique,
+ordered targets including 0 and F−1. For F < N all F frames are exported without
+duplicates or per-file modal prompts; the result is `shortened_to_all_frames`.
+Optional ±context frames are deduplicated and do not increase target progress.
+New packages have zero objects/states and zero completed targets. Sampling is
+based on frame index, never header FPS or physical event classification.
+
+**Skip existing** is the default and enables simple resume by rerunning the job.
+**Overwrite existing** explicitly permits atomic replacement; **Report conflicts
+only** lists and preserves existing destinations while creating non-conflicting
+packages. Source size/mtime are checked at scan and generation, including before
+commit. One failed Cine does not stop the other items. Changed sources are marked
+failed with `source_unchanged=false`; investigate them before retrying.
+
+**Cancel** takes effect at the next safe checkpoint after an in-flight read or
+validation operation. Uncommitted temporary containers are removed; completed
+packages remain. Only one Cine is open at a time. The existing writer retains
+that Cine's selected encoded PNGs in memory, not the complete Cine or whole batch;
+its existing package size limits still apply. Each Cine gets its own Ref90 gain.
+
+`<output>/<source-name>/_batch_manifest.json` is an atomic generation log, not
+Ground Truth. It records the Scheme snapshot, requested/actual counts, context,
+relative source/package paths, outcomes, decoded counts, elapsed time and source
+checks. No absolute source root is persisted. Rerunning replaces this latest-run
+manifest; previously completed packages are retained according to the chosen
+policy. Failure to write the manifest is reported in the dialog and does not
+remove completed packages. The completion summary offers **Open output folder**
+and **View failures**. Dedicated retry-failed/checkpoint-database features are
+not part of v1.
+
+The resulting packages support offline annotation, Quick Save, collaboration and
+returned-package import exactly like individually generated packages. TIME64,
+Raw PNG equality, Scheme IDs and canonical merge boundaries are unchanged.
+
 ## Scope and troubleshooting
 
 | Situation | Action |
@@ -219,3 +306,56 @@ sync, database, real-time coediting, scientific measurement or full-Cine trackin
 is performed in review mode.
 
 Related: [Editor](annotation_editor.md) · [Data Architecture](data_architecture_concept_v1.md) · [Index](README.md).
+
+
+## Package-wide support-rod templates
+
+In Package Mode the checkbox reads **应用全包 / Apply to entire package**, never
+Apply to entire Cine. It appears only for `support_structure`, and is disabled
+without a confirmed source or existing template. Draw rods on a clear packaged
+frame; right-click one and choose **Set as support-rod template and apply to entire
+package**. All confirmed editable rods on that frame form the set. Existing
+template replacement is confirmed.
+
+Each package Cine's annotation snapshot may contain this backward-compatible node:
+
+```json
+{
+  "package_templates": {
+    "support_structure": {
+      "enabled": true,
+      "source_frame_index": 32195,
+      "annotation_ids": ["confirmed-source-record-id"],
+      "frame_overrides": {
+        "0": {"translation": {"dx": -2.4, "dy": 1.7}}
+      }
+    }
+  }
+}
+```
+
+The manifest defines the available domain, including target and context frames.
+Source frames and offset keys must belong to it. Normal Cine `cine_templates`
+snapshots remain separate and immutable in package mode. Neither enabling nor
+moving a package template creates one polygon record per frame. A shared runtime
+`SupportTemplateScope` resolves geometry for both modes.
+
+Select a rod and drag **✥** to align the whole set on one frame. Vertex corrections
+materialize local geometry with `creation_tool = package_support_template_override`
+and source provenance. Deleting/rejecting corrections restores the projection.
+Pure projections do not mark every target annotated. Source/override records and
+explicit translations contribute to human markers and target progress.
+
+**Quick Save** stores enabled state, sparse translations, local geometry and
+immutable history; reopening needs no Cine. Older `.dvapkg`/`.dvrpkg` without this
+node remain valid, with no inferred package template. Legacy materialized Cine
+projections retain their prior review workflow.
+
+Returned-package import adds `import_package_support_template_candidate` history
+entries with a `reviewed_candidate`: template, source records/geometry, packaged
+frame domain, offsets and package/reviewer provenance. Identical imports are
+deduplicated; revised candidates are retained separately. **No canonical Cine
+template is replaced or enabled automatically.** Ordinary records still use the
+existing merge/conflict mechanism. A dedicated “adopt as Cine template / apply
+selected frames / ignore” UI is not implemented in v1; candidates are preserved
+for explicit review. A package describes a subset, not unbundled frames.

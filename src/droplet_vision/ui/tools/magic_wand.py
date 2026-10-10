@@ -94,7 +94,7 @@ class MagicWandTool(EditorTool):
         panel.confirm_button.setEnabled(self.valid)
         self.draft.replace(polygons)
         self.applied_settings = self.settings()
-        self.editor.message(tr('Closed draft: adjust vertices, then Confirm.'))
+        self.editor.message(tr('Closed draft: adjust vertices, then Space / Enter: Confirm. Esc: Cancel.'))
 
     def mouse_move(self, position):
         self.draft.move(position)

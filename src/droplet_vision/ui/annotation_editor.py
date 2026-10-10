@@ -289,8 +289,7 @@ class AnnotationEditor(QObject):
     def can_edit(self, record):
         if record.annotation_id in self.projections():
             layer = next((layer for layer in self.window.layers if layer.layer_id == 'manual'), None)
-            return bool(self.ready and layer and layer.visible and not layer.locked
-                        and not (getattr(self.window, 'review_manager', None) and self.window.review_manager.active))
+            return bool(self.ready and layer and layer.visible and not layer.locked)
         if not self.ready or self.document is None or record.annotation_id not in self.document.active_annotation_ids:
             return False
         layer_id = self.document.record_layers[record.annotation_id]
@@ -360,7 +359,7 @@ class AnnotationEditor(QObject):
             frame = self.window.current_record
             values = deepcopy(projection.attributes)
             values.update(attributes or {})
-            values.update(creation_tool='cine_support_template_override', raw_time64=frame.timestamp_time64,
+            values.update(creation_tool=self.document.support_scope.kind + '_support_template_override', raw_time64=frame.timestamp_time64,
                           relative_timestamp_s=frame.timestamp_s, display_mode_used=self.window.display_panel.settings.mode)
             record = AnnotationRecord(frame.cine_id, frame.frame_index, 'support_structure', 'polygon',
                                       deepcopy(geometry), attributes=values)
@@ -369,6 +368,7 @@ class AnnotationEditor(QObject):
             except ValueError as error:
                 self.message(str(error))
                 return False
+            self.window.review_manager.prepare_record(record)
             self.selected_id = record.annotation_id
             self.undo_stack.push(AddAnnotationCommand(self.document, record, 'manual', self.changed))
             return True
@@ -471,6 +471,7 @@ class AnnotationEditor(QObject):
                                     (hasattr(self, "workflow") and self.workflow.notes_pending)) else ""))
         review = getattr(self.window, 'review_manager', None)
         if review is not None and review.active:
+            review.refresh_save_button()
             self.window.annotation_data_panel.update_document(
                 None, review.package.path, None, review.package.dirty or self.workflow.notes_pending)
             self.window.annotation_data_panel.status.setText(tr('Unsaved changes' if review.package.dirty
@@ -501,8 +502,8 @@ class AnnotationEditor(QObject):
         if self.document is not None and self.window.current_record is not None and self.selected_id:
             group = self.document.support_group(self.window.current_record.frame_index)
             if self.selected_id not in {r.annotation_id for r in group}:
-                source_id = (self.selected_id.removeprefix('cine-template:')
-                             if self.selected_id.startswith('cine-template:') else
+                source_id = (self.selected_id.split(':', 1)[1]
+                             if self.selected_id.startswith(('cine-template:', 'package-template:')) else
                              self.document.support_source_id(self.document.records.get(self.selected_id))
                              if self.selected_id in self.document.record_layers else None)
                 replacement = next((r for r in group if self.document.support_source_id(r) == source_id), None) if source_id else None

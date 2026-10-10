@@ -279,8 +279,12 @@ class WorkflowPanel:
     def _notes_changed(self):
         self._notes_visibility()
         if not self.refreshing and self.editor.ready:
-            self.notes_pending = True
+            record = self.editor.document.frame_state(self.window.current_record.frame_index)
+            self.notes_pending = self.notes.toPlainText() != (record.notes if record else '')
             self.editor.update_title()
+            review = getattr(self.window, 'review_manager', None)
+            if review is not None and review.active:
+                review.refresh()
 
     def flush_notes(self):
         if self.notes_pending:

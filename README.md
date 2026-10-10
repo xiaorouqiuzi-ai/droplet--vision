@@ -157,6 +157,9 @@ See [preprocessing policy](docs/image_preprocessing_policy.md) and
 **Cine-level support-rod reuse:** project one template across the Cine without
 per-frame duplication, with sparse per-frame support-rod alignment overrides, independent
 geometry corrections and list visibility/deletion controls.
+Package Mode offers separate **Apply to entire package** over included frames,
+with the same move handle and Quick Save; returned templates remain review
+candidates rather than automatically replacing the Cine template.
 See the [template workflow](docs/annotation_editor.md#cine-level-droplet-support-rod-template).
 
 ```text
@@ -207,6 +210,18 @@ Review. Same-Cine items reuse the reader. Reopen the saved queue to resume.
 See [sampling and queue workflow](docs/frame_sampling_queue.md).
 
 ## Annotation Packages
+
+**Functions → Create Annotation Packages from Folder…** recursively generates
+one uniform-sampled package per Cine, preserving the selected folder and its
+subdirectories. Sources stay read-only; default skip-existing supports resume.
+
+```text
+Dataset/B/111.cine → Packages/Dataset/B/111.dvapkg
+Dataset/C/222.cine → Packages/Dataset/C/222.dvapkg
+```
+
+See [Batch Annotation Package Generation](docs/annotation_package.md#batch-annotation-package-generation)
+for scan preview, context frames, cancellation and the batch manifest.
 
 An **Annotation Package** (`.dvapkg`) transports raw PNG frames, TIME64, a Scheme
 snapshot, optional annotations/Frame States and checksums. It can distribute

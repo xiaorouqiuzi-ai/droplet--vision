@@ -108,6 +108,15 @@ translation into full local geometry, independently of the global template.
 The source frame can also be shifted locally without altering the template.
 See [template details](annotation_editor.md#cine-level-droplet-support-rod-template).
 
+In **Annotation Package Mode**, the checkbox becomes **应用全包 / Apply to entire
+package** and affects only included target/context frames. Right-click a confirmed
+rod to set/apply all current rods as the package template; replacement requires
+confirmation. Use **✥** for independent offsets and **Quick Save** to retain them.
+Pure projections add neither per-frame polygon records nor human markers to every
+target. Returned templates remain Reviewed candidates and never automatically
+replace the original Cine template. See [package template scope](annotation_package.md#package-wide-support-rod-templates).
+
+
 **Annotation → Save Annotations / Ctrl+Shift+S** saves under
 `outputs/annotations/<cine>.annotations.json` by default. **Current Annotation
 Data** shows the actual saved location, or only a suggested location before
@@ -130,6 +139,15 @@ Menus: **File → Annotation → Queue → View → Model → Settings → Funct
 Functions groups independent package utilities; File keeps Cine and Session operations,
 and Annotation keeps canonical AnnotationDocument operations.
 
+For a folder of Cine files, choose **Functions → Create Annotation Packages from
+Folder…**. Select the source folder and a separate output parent, keep or adjust
+the default 20 targets and 0 context frames, then **Scan → Start creating**.
+The output preserves the source folder name and nested paths, with one same-stem
+`.dvapkg` per Cine. Short Cine files export all frames. Default **Skip existing**
+allows rerunning to resume; cancellation preserves completed packages. The source
+tree remains read-only. See [Batch Annotation Package Generation](annotation_package.md#batch-annotation-package-generation)
+for overwrite/conflict policies, progress and the `_batch_manifest.json` log.
+
 For a new task, choose **Functions → Create Annotation Package from Uniform Cine
 Sampling…**, select one Cine and N=50. No existing annotations or Queue is required.
 For a 32196-frame Cine this produces 50 targets, from 0 to 32195, with context 0 by default.
@@ -141,6 +159,14 @@ annotates objects/states, and chooses **Save Annotation Package As…** to retur
 **Import Returned Annotation Package…**. Empty-base tasks accept new candidates;
 existing-annotation reviews retain base/local/reviewer conflict checks. Nothing silently
 becomes Ground Truth. Follow the [full workflow](annotation_package.md).
+
+When package data changes, **保存标注包 / Save Annotation Package** appears at the
+bottom right. Click it to atomically overwrite the current `.dvapkg`, without a
+Save As dialog; success hides the button and clears the dirty marker. Undo back
+to saved work hides it; Redo shows it again. Display-only changes do not trigger it.
+Use **Save Annotation Package As…** to retain versions or return a separate copy.
+For legacy `.dvrpkg` and unpacked folders, the shortcut routes to Save As instead.
+Read-only or failed saves preserve the original and offer Save As guidance.
 
 ## Troubleshooting
 
@@ -157,3 +183,11 @@ becomes Ground Truth. Follow the [full workflow](annotation_package.md).
 | Document mismatch | Locate the matching Cine/document; do not rename raw data to bypass checks |
 
 Related: [Viewer](cine_viewer.md) · [Annotation Editor](annotation_editor.md) · [Index](README.md).
+
+## Draft confirmation shortcuts
+
+With the canvas focused, **Space** confirms a closed polygon or Magic Wand draft.
+An open draft stays open and displays a close-first hint; playback stays stopped.
+With no draft, Space retains Review Playback Play/Pause. **Esc** cancels the draft.
+Enter remains supported (close an open draft, confirm a closed draft). Space in
+Notes or another text field inserts a normal space.

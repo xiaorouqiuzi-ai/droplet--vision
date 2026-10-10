@@ -141,7 +141,7 @@ class AnnotationPanel(QWidget):
 
     def set_records(self, records, colors=None, hidden=(), projections=()):
         self.projection_ids = set(projections)
-        self.count.setText(tr('Frame annotations: {count} | Cine templates: {templates}').format(
+        self.count.setText(tr('Frame annotations: {count} | Templates: {templates}').format(
             count=len(records)-len(projections), templates=len(projections)))
         blocker = QSignalBlocker(self.items)
         self.items.clear()
@@ -158,11 +158,11 @@ class AnnotationPanel(QWidget):
                 title += f' {template_numbers[record.annotation_id]}'
             if record.label_id == 'daughter_droplet':
                 title += f' #{ordinals[record.annotation_id]}'
-            detail = tr('Cine template') if record.annotation_id in projections else (
-                tr('Frame override') if record.attributes.get('creation_tool') == 'cine_support_template_override' else record.source)
+            detail = tr('Package template' if record.attributes.get('template_scope') == 'package' else 'Cine template') if record.annotation_id in projections else (
+                tr('Frame override') if record.attributes.get('creation_tool') in ('cine_support_template_override', 'package_support_template_override') else record.source)
             text = f"{title}\n{record.geometry_type} · {detail}"
             offset = record.attributes.get('frame_translation')
-            if offset and record.attributes.get('creation_tool') == 'cine_template_projection':
+            if offset and record.attributes.get('creation_tool') in ('cine_template_projection', 'package_template_projection'):
                 text += '\n' + tr('Offset ({dx:+.3f}, {dy:+.3f})').format(**offset)
             self.items.addItem(text)
             item = self.items.item(self.items.count()-1)
@@ -200,6 +200,8 @@ class AnnotationPanel(QWidget):
         else:
             action = menu.addAction(tr('Delete Annotation'), lambda: self.delete_requested.emit(annotation_id))
             action.setEnabled(self.can_delete(annotation_id))
+        if hasattr(self, 'support_actions'):
+            self.support_actions(menu, annotation_id)
         return menu
 
     def show_context_menu(self, position):

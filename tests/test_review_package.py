@@ -118,6 +118,7 @@ class ReviewPackageTests(unittest.TestCase):
             pkg.save(path)
             before = path.read_bytes()
             pkg.start_review('reviewer')
+            pkg.review['frame_notes']['synthetic:10'] = 'Unsaved review note'
             with patch('droplet_vision.review_package.bundle.os.replace',side_effect=OSError('simulated')):
                 with self.assertRaises(OSError): pkg.save(path)
             self.assertEqual(path.read_bytes(),before)

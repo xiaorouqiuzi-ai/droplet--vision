@@ -10,7 +10,8 @@ from ..annotations import AnnotationDocument
 from ..sampling.uniform import uniform_frame_indices
 
 
-def export_cines(requests, scheme, context=5, creator='', version='unknown', purpose='review'):
+def export_cines(requests, scheme, context=5, creator='', version='unknown', purpose='review', *,
+                 checkpoint=None, progress=None):
     """Each request holds a local path/document/targets. Paths never enter the bundle."""
     before = {Path(r['path']).resolve(): (Path(r['path']).stat().st_size, Path(r['path']).stat().st_mtime_ns)
               for r in requests}
@@ -18,7 +19,16 @@ def export_cines(requests, scheme, context=5, creator='', version='unknown', pur
         with ExitStack() as stack:
             sources = []
             for request in requests:
+                if checkpoint:
+                    checkpoint()
                 reader = stack.enter_context(CineReader(request['path']))
+                def read_frame(index, reader=reader):
+                    if checkpoint:
+                        checkpoint()
+                    pixels = reader.read_frame(index)
+                    if progress:
+                        progress(index)
+                    return pixels
                 doc, meta = request['document'], reader.metadata
                 identity = reader.build_frame_result(0).cine_id
                 if doc.cine_id != identity or not doc.matches_cine(meta.filename, meta.file_size_bytes, meta.frame_count, meta.width, meta.height):
@@ -26,11 +36,11 @@ def export_cines(requests, scheme, context=5, creator='', version='unknown', pur
                 photo = request.get('photometric')
                 if photo is None:
                     try:
-                        photo = estimate_reference(reader.read_frame(cine_reference_index(meta.frame_count)),
+                        photo = estimate_reference(read_frame(cine_reference_index(meta.frame_count)),
                                                    meta.frame_count, load_photometric_preset()).to_dict()
                     except ValueError:
                         photo = None  # Explicit Raw fallback, never an invented gain.
-                sources.append({**request, 'get_frame':reader.read_frame,
+                sources.append({**request, 'get_frame':read_frame,
                                 'get_metadata':reader.build_frame_result, 'photometric':photo})
             return export_package(sources, deepcopy(scheme), context, creator, version, purpose)
     finally:
@@ -58,7 +68,8 @@ def inspect_cine(path):
 
 def export_uniform_cine(path, destination, sample_count, scheme, *, context=0,
                         purpose='annotation', creator='', version='unknown',
-                        allow_short=False, expected=None, document=None):
+                        allow_short=False, expected=None, document=None, checkpoint=None,
+                        progress=None, batch_metadata=None, before_commit=None):
     """One Cine, bounded sampled reads; retain encoded PNGs, never a whole video.
 
     A detached raw-only base may merge into a matching Cine document without
@@ -68,6 +79,8 @@ def export_uniform_cine(path, destination, sample_count, scheme, *, context=0,
     if destination == path or path.parent == destination.parent or path.parent in destination.parents:
         raise ValueError('Do not export into the source Cine directory')
     before = path.stat()
+    if checkpoint:
+        checkpoint()
     info = inspect_cine(path)
     if expected is not None and info != expected:
         raise ValueError('Cine changed since sampling preview; reopen the dialog')
@@ -85,14 +98,24 @@ def export_uniform_cine(path, destination, sample_count, scheme, *, context=0,
             raise ValueError('AnnotationDocument and export scheme snapshots differ')
     try:
         package = export_cines([{'path': path, 'document': document, 'targets': indices,
-                                 'standalone_empty_base': standalone}], scheme, context, creator, version, purpose)
+                                 'standalone_empty_base': standalone}], scheme, context, creator, version, purpose,
+                               checkpoint=checkpoint, progress=progress)
         package.manifest['sampling'] = {'method': 'uniform_frame_sampling', 'requested_samples': sample_count,
                                         'actual_target_count': len(indices), 'frame_indices': indices,
                                         'context_radius': context, 'rounding': 'nearest_ties_to_even'}
         after = path.stat()
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise RuntimeError('SOURCE CHANGED during uniform export')
-        package.save(destination)
+        if batch_metadata is not None:
+            package.manifest['creation_method'] = 'recursive_uniform_folder_sampling'
+            package.manifest['batch'] = deepcopy(batch_metadata)
+        def guard():
+            current = path.stat()
+            if (before.st_size, before.st_mtime_ns) != (current.st_size, current.st_mtime_ns):
+                raise RuntimeError('SOURCE CHANGED before package commit')
+            if before_commit:
+                before_commit()
+        package.save(destination, checkpoint=checkpoint, before_commit=guard)
         return package
     finally:
         after = path.stat()

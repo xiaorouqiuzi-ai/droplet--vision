@@ -16,7 +16,7 @@ For installation use [Getting Started](getting_started.md).
 5. Click several boundary vertices. Click the first vertex, double-click or
    press Enter to close. **Dashed means draft**, even after closing.
 6. Drag solid vertex handles; click/drag a hollow midpoint to insert a vertex.
-7. **Confirm / Enter** creates a solid record. Esc before confirmation discards
+7. **Space / Enter / Confirm** creates a solid record. Esc before confirmation discards
    the draft. Point annotations instead commit on a single click.
 8. Inspect nearby frames before selecting a temporal Frame State. Use More States
    for multiple additional states. Add Uncertain/Notes where appropriate.
@@ -73,6 +73,10 @@ insert and optionally move a vertex. On a selected persisted polygon, double-cli
 an edge inserts the nearest projected point on that edge. Delete or right-click
 Delete Vertex removes a selected real vertex only if at least three remain.
 With no selected vertex, Delete deactivates the selected annotation.
+
+Space uses the same Confirm command as the button, including one compound undo for
+multiple Magic Wand components. Esc cancels the active draft. Text inputs keep
+normal spaces; focused buttons keep their native action, without a second canvas action.
 
 Draft edits have transient Undo/Redo. Confirmation is one document command;
 a persisted vertex/midpoint edit produces one derived record on release. Original
@@ -190,6 +194,7 @@ See also the Cine-local reuse workflow below.
 | Key | Action |
 | --- | --- |
 | 1 / 2 / 4 / 5 | Select / Point / Polygon / Magic Wand |
+| Space (canvas focus) | Confirm closed polygon / Magic Wand draft; open draft: hint only, no playback; no draft: Play/Pause |
 | Enter | Close open draft; Confirm closed draft |
 | Esc / Backspace | Cancel temporary work / remove last open polygon vertex |
 | Delete | Delete selected vertex, otherwise deactivate selected annotation |
@@ -316,8 +321,8 @@ remain distinctly labelled.
 
 ### Current annotation list actions
 
-The list separates **Frame annotations** from **Cine templates**. Projected rows
-are explicitly labelled *Cine template*, with the Scheme color and source name
+The list separates **Frame annotations** from **Templates**. Projected rows
+are explicitly labelled *Cine template* or *Package template*, with the Scheme color and source name
 (or a display ordinal). Select them to create an independent local correction.
 
 Each row's small eye toggle hides/shows only that overlay. It does not change
@@ -354,6 +359,39 @@ The original Cine template is never updated by review. Concurrent local override
 a changed local offset, or a changed/disabled template require explicit conflict
 resolution. Exported geometry already incorporates the frame translation exactly
 once. A reviewer can move the materialized group using the same handle; its changes
-return as Reviewed full-geometry local candidates, never as template updates. Template
-management is disabled in review mode. Raw pixels, TIME64 and Ref90 remain
-unchanged throughout this workflow.
+return as Reviewed full-geometry local candidates, never as automatic template updates.
+Package-local templates are separate from these legacy snapshots. Raw pixels,
+TIME64 and Ref90 remain unchanged throughout this workflow.
+
+
+### Cine scope versus package scope
+
+**Apply to entire Cine ≠ Apply to entire package.** Normal Cine mode projects
+`cine_templates` over the full Cine frame domain. Package Mode uses separate
+`package_templates`, limited to the target **and context** frames physically
+present in its manifest. Missing frames get no projection. Older packages without
+this optional metadata have no package-wide template; retained Cine snapshot
+metadata is not silently promoted into one.
+
+Select **载滴杆 / Droplet support rod** to show the scope-specific checkbox.
+Right-click a real editable rod row and choose **Set as support-rod template and
+apply to entire Cine/package**. All confirmed editable support polygons on the
+current frame form the set. Replacing an existing template requires **Replace
+template / Cancel** confirmation. Explicit Update actions use the same confirmation.
+Projection rows offer disable/hide rather than Delete; Reset frame position clears
+a sparse translation.
+
+Both scopes use the same projection resolver, center **✥** handle and Undo
+commands. The combined rod bounding-box center moves the whole set; each frame
+stores only its own dx/dy. Vertex editing after translation materializes that
+frame's geometry overrides, leaving other frames and source geometry unchanged.
+Package rows say **标注包模板 / Package template**, including offsets; geometry
+corrections say **本帧覆盖 / Frame override**. Pure projections create no human
+markers. Sources, translation corrections and full local overrides do.
+
+Quick Save persists package templates and offsets. Undo to saved effective state
+hides its save button. Returned templates become non-applied Reviewed candidates
+in import history, including source geometry, available domain, offsets and
+package provenance. They never replace the canonical Cine template. Dedicated
+candidate adoption UI is deferred; this version retains candidates for explicit
+review. See [package scope and schema](annotation_package.md#package-wide-support-rod-templates).

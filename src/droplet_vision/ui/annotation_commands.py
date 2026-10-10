@@ -45,16 +45,17 @@ class AddAnnotationCommand(QUndoCommand):
 
 class SetCineTemplateCommand(QUndoCommand):
     def __init__(self, document, templates, changed=lambda: None):
-        super().__init__(tr('Set as Cine Support Rod Template'))
+        super().__init__(tr('Set as package support-rod template' if document.support_scope.kind == 'package'
+                            else 'Set as Cine Support Rod Template'))
         self.document, self.changed = document, changed
-        self.before, self.after = document.cine_templates, document._validate_templates(templates)
+        self.before, self.after = document.support_templates, document._validate_templates(templates, document.support_scope)
 
     def redo(self):
-        self.document.replace_cine_templates(self.after)
+        self.document.replace_support_templates(self.after)
         self.changed()
 
     def undo(self):
-        self.document.replace_cine_templates(self.before)
+        self.document.replace_support_templates(self.before)
         self.changed()
 
 
@@ -87,7 +88,7 @@ class SupportGeometryCommand(QUndoCommand):
     def __init__(self, document, rows, templates, changed=lambda: None):
         super().__init__(tr('Edit support rod group'))
         self.document, self.rows, self.changed = document, rows, changed
-        self.before, self.after = document.cine_templates, templates
+        self.before, self.after = document.support_templates, templates
         self.added = False
 
     def redo(self):
@@ -98,14 +99,14 @@ class SupportGeometryCommand(QUndoCommand):
         self.document.transition(activate=[r.annotation_id for _, r, _ in self.rows],
                                  deactivate=[old for old, _, _ in self.rows if old], reason='support_geometry')
         if self.after != self.before:
-            self.document.replace_cine_templates(self.after)
+            self.document.replace_support_templates(self.after)
         self.changed()
 
     def undo(self):
         self.document.transition(activate=[old for old, _, _ in self.rows if old],
                                  deactivate=[r.annotation_id for _, r, _ in self.rows], reason='undo_support_geometry')
         if self.after != self.before:
-            self.document.replace_cine_templates(self.before)
+            self.document.replace_support_templates(self.before)
         self.changed()
 
 

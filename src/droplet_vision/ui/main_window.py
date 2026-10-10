@@ -4,7 +4,7 @@ from pathlib import Path
 from dataclasses import replace
 from bisect import bisect_right
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                                QFileDialog, QMessageBox, QLabel, QListWidget, QInputDialog, QDockWidget, QScrollArea, QGroupBox, QToolButton)
 from ..annotations import AnnotationLayer, Bookmark, ViewerSession
@@ -188,7 +188,12 @@ class MainWindow(QMainWindow):
             self._action(view, shortcut, lambda checked=False, d=delta: self.step(d), shortcut)
         self._action(view, tr("First frame"), lambda: self.navigate(0), "Home")
         self._action(view, tr("Last frame"), lambda: self.navigate(self.controller.state.frame_count - 1), "End")
-        self._action(view, tr("Review playback"), self.toggle_play, "Space")
+        self._action(view, tr("Review playback"), self.toggle_play)
+        # Canvas owns Space; text editors and focused buttons retain native behavior.
+        self.space_shortcut = QShortcut(QKeySequence("Space"), self.canvas)
+        self.space_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.space_shortcut.setAutoRepeat(False)
+        self.space_shortcut.activated.connect(self._canvas_space)
         annotation = self.menuBar().addMenu(tr("Annotation"))
         self.annotation_menu = annotation
         self._action(annotation, tr("Bookmark current frame"), self.add_bookmark, "B")
@@ -199,6 +204,17 @@ class MainWindow(QMainWindow):
         future.setEnabled(False)
         help_menu = self.menuBar().addMenu(tr("Help"))
         self._action(help_menu, tr('About'), self.show_about)
+
+    def _canvas_space(self):
+        draft = getattr(self.editor.tool, 'draft', None)
+        if draft is not None and draft.active:
+            if draft.closed:
+                # Same validation and compound undo path as the Confirm buttons.
+                self.editor.tool.commit()
+            else:
+                self.editor.message(tr('Close the polygon before pressing Space to confirm.'))
+            return
+        self.toggle_play()
 
     def reorder_menus(self):
         actions = {a.text(): a for a in self.menuBar().actions()}
@@ -259,6 +275,8 @@ class MainWindow(QMainWindow):
                 button.setToolTip(tr('Jump {delta} frames').format(delta=f'{delta:+d}'))
             self.queue_manager.refresh()
             self.review_manager.refresh()
+            if self.review_manager.batch_window is not None:
+                self.review_manager.batch_window.retranslate()
             if self.about_dialog is not None:
                 self.about_dialog.retranslate()
             self.display_label.setText(tr('Display: ') + self.display_panel.mode.currentText())
@@ -600,6 +618,12 @@ class MainWindow(QMainWindow):
             self._error(str(error))
 
     def closeEvent(self, event):
+        batch = getattr(getattr(self, 'review_manager', None), 'batch_window', None)
+        if batch is not None and batch.busy:
+            batch.cancel()
+            self.statusBar().showMessage(tr('Cancelling after the current read; completed packages are retained.'))
+            event.ignore()
+            return
         if hasattr(self, 'review_manager') and self.review_manager.task is not None:
             self.statusBar().showMessage(tr('Wait for annotation package export to finish.'))
             event.ignore()

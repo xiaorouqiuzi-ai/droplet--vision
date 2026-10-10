@@ -52,6 +52,21 @@ def merge_review(local, package, resolutions=None):
             or local.to_dict()['cine'] != base.to_dict()['cine']):
         raise ValueError('Review base document/Cine identity does not match the local document')
     result = AnnotationDocument.from_dict(local.to_dict())
+    # A sparse package is not evidence about the entire Cine. Preserve the
+    # reusable template and offsets as an explicit, non-applied review candidate.
+    if remote.package_templates:
+        template = remote.package_templates['support_structure']
+        candidate = {
+            'status': 'reviewed_candidate', 'source_scope': 'package',
+            'provenance': deepcopy(package.provenance()),
+            'available_frames': sorted(row['frame_index'] for row in package.manifest['frames'] if row['cine_id'] == cine),
+            'package_templates': remote.package_templates,
+            'source_records': [remote.records.get(key).to_dict() for key in template['annotation_ids']],
+            'canonical_template_replaced': False,
+        }
+        if not any(h.get('action') == 'import_package_support_template_candidate' and h.get('candidate') == candidate
+                   for h in result.history):
+            result._touch('import_package_support_template_candidate', candidate=candidate)
     conflicts, imported = [], []
     base_objects = {r.annotation_id:r for r in base.records.records()}
     remote_objects = {r.annotation_id:r for r in remote.records.records()}
