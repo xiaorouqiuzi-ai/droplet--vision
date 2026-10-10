@@ -4,6 +4,7 @@ from .i18n import tr, current_language
 from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
+from ..resources import output_path
 
 from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainterPath, QPen, QUndoStack
@@ -682,7 +683,7 @@ class AnnotationEditor(QObject):
             path = queue.annotation_path()
             if path is not None:
                 return path
-        return Path("outputs/annotations") / (Path(self.document.cine_filename).stem + ".annotations.json")
+        return output_path('annotations') / (Path(self.document.cine_filename).stem + ".annotations.json")
 
     def save(self, path):
         if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
@@ -770,7 +771,7 @@ class AnnotationEditor(QObject):
     def open_dialog(self):
         if not self.ready:
             return
-        path, _ = QFileDialog.getOpenFileName(self.window, tr("Open Annotations"), "outputs/annotations", tr("Annotation JSON (*.json)"))
+        path, _ = QFileDialog.getOpenFileName(self.window, tr("Open Annotations"), str(output_path('annotations')), tr("Annotation JSON (*.json)"))
         if path:
             try:
                 self.load(path)
@@ -788,7 +789,7 @@ class AnnotationEditor(QObject):
         if self.document is None or not self.document.dirty:
             return
         # Stable document UUID prevents two Cine files with the same stem overwriting recovery data.
-        path = Path("outputs/annotations/autosave") / (
+        path = output_path('annotations/autosave') / (
             Path(self.document.cine_filename).stem + "." + self.document.document_id + ".annotations.autosave.json")
         queue = getattr(self.window, "queue_manager", None)
         if queue is not None and queue.annotation_path() is not None:

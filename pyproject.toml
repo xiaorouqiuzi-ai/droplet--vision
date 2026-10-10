@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "droplet-vision"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Scientific interfaces for high-speed suspended-droplet vision"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -15,6 +15,10 @@ dependencies = []
 [project.optional-dependencies]
 cine = ["pims==0.7"]
 ui = ["PySide6==6.10.2"]
+release = ["PyInstaller==6.22.3"]
+
+[tool.setuptools.dynamic]
+version = {attr = "droplet_vision._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

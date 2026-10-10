@@ -8,6 +8,8 @@ direction without an executable workflow.
 
 ## Documentation Map
 
+- **Windows distribution:** [Portable ZIP, installer and build guide](windows_release.md).
+
 - **New user:** [Overview](../README.md) → [Getting Started](getting_started.md) → [Annotation Editor](annotation_editor.md).
 - **Reviewer:** [Overview](../README.md) → [Annotation Package](annotation_package.md).
 - **Developer:** [Annotation Architecture](annotation_architecture.md) → [Data Architecture](data_architecture_concept_v1.md).

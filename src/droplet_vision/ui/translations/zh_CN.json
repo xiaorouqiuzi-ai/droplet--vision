@@ -505,5 +505,6 @@
   "Click to add vertices; click the first vertex to close. Space / Enter: Confirm closed draft. Esc: Cancel.": "点击添加节点；点击首节点闭合。闭合后空格 / Enter：确认。Esc：取消。",
   "Click a region in the image, then adjust the closed draft. Space / Enter: Confirm. Esc: Cancel.": "点击图像区域，然后调整闭合草稿。空格 / Enter：确认。Esc：取消。",
   "Closed draft: adjust vertices, then Space / Enter: Confirm. Esc: Cancel.": "闭合草稿：调整节点后，空格 / Enter：确认。Esc：取消。",
-  "Close the polygon before pressing Space to confirm.": "请先闭合多边形，再按空格确认。"
+  "Close the polygon before pressing Space to confirm.": "请先闭合多边形，再按空格确认。",
+  "Open a .cine, .dvapkg or .dvrpkg file.": "请选择 .cine、.dvapkg 或 .dvrpkg 文件。"
 }

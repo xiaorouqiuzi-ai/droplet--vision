@@ -6,6 +6,7 @@ import json
 import os
 import stat
 from pathlib import Path
+from ..resources import output_path
 
 from PySide6.QtCore import QObject, QThreadPool, QSignalBlocker
 from PySide6.QtGui import QUndoCommand
@@ -259,7 +260,7 @@ class ReviewCoordinator(QObject):
 
     def open_dialog(self, checked=False, folder=False):
         path = (QFileDialog.getExistingDirectory(self.window,tr('Open Annotation Package Folder...')) if folder else
-                QFileDialog.getOpenFileName(self.window,tr('Open Annotation Package...'),'outputs/annotation_packages','Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')[0])
+                QFileDialog.getOpenFileName(self.window,tr('Open Annotation Package...'),str(output_path('annotation_packages')),'Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')[0])
         if not path:
             return
         try:
@@ -475,7 +476,7 @@ class ReviewCoordinator(QObject):
     def autosave(self):
         if self.active and self.package.dirty:
             self.window.editor.workflow.flush_notes()
-            self.package.save(Path('outputs/annotation_packages/temp') / (self.package.manifest['package_id']+'.autosave.dvapkg'),mark_saved=False)
+            self.package.save(output_path('annotation_packages/temp') / (self.package.manifest['package_id']+'.autosave.dvapkg'),mark_saved=False)
 
     def export_requests(self, selection, statuses):
         w, editor = self.window,self.window.editor
@@ -588,7 +589,7 @@ class ReviewCoordinator(QObject):
 
     @staticmethod
     def output_path(name):
-        directory = Path('outputs/annotation_packages/exported').resolve()
+        directory = output_path('annotation_packages/exported').resolve()
         directory.mkdir(parents=True, exist_ok=True)
         return directory / name
 
@@ -606,7 +607,7 @@ class ReviewCoordinator(QObject):
         editor = self.window.editor
         if self.active or editor.document is None:
             return
-        path, _ = QFileDialog.getOpenFileName(self.window,tr('Import Returned Annotation Package...'),'outputs/annotation_packages','Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')
+        path, _ = QFileDialog.getOpenFileName(self.window,tr('Import Returned Annotation Package...'),str(output_path('annotation_packages')),'Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')
         if not path:
             return
         try:

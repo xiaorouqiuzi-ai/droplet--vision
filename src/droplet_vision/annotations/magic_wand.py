@@ -9,6 +9,7 @@ from collections import deque
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from ..resources import resource_path
 import numpy as np
 
 
@@ -33,7 +34,7 @@ class WandConfig:
 
 
 def load_wand_config(path=None):
-    path = Path(path) if path else Path(__file__).resolve().parents[3] / 'configs/annotations/magic_wand_v1.json'
+    path = Path(path) if path else resource_path('configs/annotations/magic_wand_v1.json')
     return WandConfig(**json.loads(path.read_text(encoding='utf-8')))
 
 

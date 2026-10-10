@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from ..resources import resource_path
 from typing import Tuple
 
 
@@ -45,7 +46,7 @@ class SamplingConfig:
 
 
 def load_sampling_config(path=None) -> SamplingConfig:
-    path = Path(path) if path is not None else Path(__file__).resolve().parents[3] / "configs/sampling/frame_sampling_v1.json"
+    path = Path(path) if path is not None else resource_path('configs/sampling/frame_sampling_v1.json')
     values = json.loads(path.read_text(encoding="utf-8"))
     values["anchor_fractions"] = tuple(values["anchor_fractions"])
     return SamplingConfig(**values)

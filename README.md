@@ -92,7 +92,18 @@ no GPU, Torch, YOLO, OpenCV or SciPy.
 After activation, `launch_viewer.cmd` is the Windows launcher. For a desktop
 shortcut or an external environment, see [launcher setup](docs/getting_started.md#launch).
 Machine-specific interpreter paths belong in local settings, not versioned files.
-Windows installer packaging and file association remain planned.
+See [Windows releases](#windows-releases) for standalone distributions.
+
+## Windows Releases
+
+Windows portable ZIP and installer builds are prepared for beta review. Download
+published builds from [GitHub Releases](https://github.com/xiaorouqiuzi-ai/droplet--vision/releases);
+a draft candidate is not publicly downloadable until publication.
+
+- **Portable ZIP:** extract the complete folder and run `DropletVision.exe`.
+- **Installer:** adds shortcuts and package associations; `.cine` association is optional.
+- No separate Python installation is required. See the [Windows guide](docs/windows_release.md)
+  for data locations, uninstalling and building from source.
 
 ## Core Workflows
 
@@ -273,7 +284,7 @@ from the environment before launching the normal desktop UI.
 
 Planned, without release-date commitments:
 
-- Windows packaged release/installer and `.dvapkg` file association.
+- Broader clean-machine Windows distribution validation and release signing.
 - Dataset export and prediction import/provider integration.
 - Segmentation baselines, measurement extraction and TIME64-based temporal event logic.
 

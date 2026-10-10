@@ -2,10 +2,11 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from ..resources import resource_path
 from .schema import AnnotationLabel, _json_copy
 
 
-CONFIG_DIR = Path(__file__).resolve().parents[3] / 'configs/annotations'
+CONFIG_DIR = resource_path('configs/annotations')
 
 
 def load_state_schema():

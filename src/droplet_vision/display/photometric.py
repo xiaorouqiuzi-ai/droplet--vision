@@ -6,6 +6,7 @@ import hashlib
 import json
 from math import isclose, isfinite
 from pathlib import Path
+from ..resources import resource_path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -32,7 +33,7 @@ class PhotometricPreset:
 
 
 def default_preset_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "configs/photometry/photometric_ref90_v1.json"
+    return resource_path('configs/photometry/photometric_ref90_v1.json')
 
 
 def load_photometric_preset(path: Optional[Union[str, Path]] = None) -> PhotometricPreset:

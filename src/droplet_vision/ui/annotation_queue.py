@@ -3,6 +3,7 @@ from __future__ import annotations
 from .i18n import tr
 import hashlib
 from pathlib import Path
+from ..resources import output_path
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QDockWidget, QFileDialog, QInputDialog
 from ..sampling import AnnotationQueue
@@ -103,7 +104,7 @@ class QueueCoordinator(QObject):
         self.refresh()
 
     def open_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(self.window, tr("Open Annotation Queue"), "outputs/annotation_queues", tr("Queue JSON (*.json)"))
+        path, _ = QFileDialog.getOpenFileName(self.window, tr("Open Annotation Queue"), str(output_path('annotation_queues')), tr("Queue JSON (*.json)"))
         if path:
             try:
                 if self.load(path):

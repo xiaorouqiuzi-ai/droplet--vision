@@ -2,6 +2,7 @@
 from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
+from ...resources import output_path
 from uuid import uuid4
 from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox,
@@ -337,7 +338,7 @@ class WorkflowPanel:
         self.editor.label_changed()
 
     def open_scheme(self):
-        path, _ = QFileDialog.getOpenFileName(self.window, tr('Open scheme...'), 'outputs/annotation_schemes', 'JSON (*.json)')
+        path, _ = QFileDialog.getOpenFileName(self.window, tr('Open scheme...'), str(output_path('annotation_schemes')), 'JSON (*.json)')
         if path:
             try:
                 value = load_scheme(path)
@@ -352,7 +353,7 @@ class WorkflowPanel:
             return
         value = dialog.custom_value()
         path, _ = QFileDialog.getSaveFileName(self.window, tr('Save as custom scheme'),
-                                             'outputs/annotation_schemes/' + value['scheme_id'] + '.json', 'JSON (*.json)')
+                                             str(output_path('annotation_schemes') / (value['scheme_id'] + '.json')), 'JSON (*.json)')
         if path:
             try:
                 save_custom_scheme(value, path)

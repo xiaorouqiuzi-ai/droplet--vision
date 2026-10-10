@@ -3,6 +3,7 @@ from copy import deepcopy
 import json
 import logging
 from pathlib import Path
+from ..resources import resource_path
 import re
 
 
@@ -57,7 +58,7 @@ def resolve_display(scheme, runtime=False):
     try:
         display = scheme.get('display')
         if display is None or (runtime and scheme.get('status') == 'approved_baseline'):
-            path = Path(__file__).resolve().parents[3] / 'configs/annotations/droplet_annotation_scheme_v1.json'
+            path = resource_path('configs/annotations/droplet_annotation_scheme_v1.json')
             display = json.loads(path.read_text(encoding='utf-8')).get('display')
             display = deepcopy(display)
             # Legacy custom taxonomies may have additional or fewer labels.

@@ -20,6 +20,7 @@ VisionLab/
 *.egg-info/
 build/
 dist/
+release/
 outputs/*
 !outputs/README.md
 data/raw/*

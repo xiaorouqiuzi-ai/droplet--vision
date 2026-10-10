@@ -8,13 +8,13 @@ translates known phrases with word boundaries, leaving IDs/numbers intact.
 from __future__ import annotations
 import json
 import os
-from pathlib import Path
+from ..resources import ui_resource_path
 import re
 from PySide6.QtCore import QSettings, QTranslator
 from PySide6.QtWidgets import QApplication
 
 LANGUAGES = ('zh_CN', 'en_US')
-_catalogs = {key: json.loads((Path(__file__).parent/'translations'/(key+'.json')).read_text(encoding='utf-8'))
+_catalogs = {key: json.loads((ui_resource_path('translations')/(key+'.json')).read_text(encoding='utf-8'))
              for key in LANGUAGES}
 _pattern = re.compile(r'(?<![\w])(' + '|'.join(re.escape(k) for k in sorted(_catalogs['en_US'],key=len,reverse=True)) + r')(?![\w])')
 _language = 'zh_CN'

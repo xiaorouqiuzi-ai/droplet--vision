@@ -1,13 +1,14 @@
 """Application branding, separate from scientific data and annotation schemes."""
 from pathlib import Path
-from importlib.metadata import metadata, PackageNotFoundError
+from .._version import DISPLAY_VERSION
+from ..resources import ui_resource_path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
 from .i18n import tr
 
 REPOSITORY = 'https://github.com/xiaorouqiuzi-ai/droplet--vision'
-ICON_DIRECTORY = Path(__file__).parent / 'assets/icons'
+ICON_DIRECTORY = ui_resource_path('assets/icons')
 
 
 def app_icon():
@@ -15,18 +16,7 @@ def app_icon():
 
 
 def project_metadata():
-    try:
-        project = metadata('droplet-vision')
-        return project.get('Version', 'unknown'), project.get('Author') or 'xiaorouqiuzi-ai'
-    except PackageNotFoundError:
-        # Source-tree launcher does not require installing the package.
-        try:
-            import tomllib
-            project = tomllib.loads((Path(__file__).resolve().parents[3] / 'pyproject.toml').read_text(encoding='utf-8'))['project']
-            authors = [a['name'] for a in project.get('authors', []) if a.get('name')]
-            return project.get('version', 'unknown'), ', '.join(authors) or 'xiaorouqiuzi-ai'
-        except (ImportError, OSError, ValueError, KeyError):
-            return 'unknown', 'xiaorouqiuzi-ai'
+    return DISPLAY_VERSION, 'xiaorouqiuzi-ai'
 
 
 class AboutDialog(QDialog):
@@ -55,9 +45,9 @@ class AboutDialog(QDialog):
     def retranslate(self):
         self.setWindowTitle(tr('About'))
         version, author = project_metadata()
-        self.description.setText(tr('Droplet Annotation Workstation') + '\n' +
-            tr('Version: {version}').format(version=version) + '\n' +
+        self.description.setText('Droplet Vision' + '\n' +
+            tr('Version: {version}').format(version='v' + version) + '\n' +
             tr('Author / repository owner: {author}').format(author=author) + '\n\n' +
             tr('Cine review and manual annotation for suspended-droplet experiments.') + '\n' +
             tr('Raw scientific pixels, display preprocessing and annotation data remain separate.') + '\n\n' +
-            tr('Application icon derived from the project planico.jpg.'))
+            'License: BSD-3-Clause\n' + tr('Application icon derived from the project planico.jpg.'))

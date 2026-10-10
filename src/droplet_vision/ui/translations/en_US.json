@@ -505,5 +505,6 @@
   "Click to add vertices; click the first vertex to close. Space / Enter: Confirm closed draft. Esc: Cancel.": "Click to add vertices; click the first vertex to close. Space / Enter: Confirm closed draft. Esc: Cancel.",
   "Click a region in the image, then adjust the closed draft. Space / Enter: Confirm. Esc: Cancel.": "Click a region in the image, then adjust the closed draft. Space / Enter: Confirm. Esc: Cancel.",
   "Closed draft: adjust vertices, then Space / Enter: Confirm. Esc: Cancel.": "Closed draft: adjust vertices, then Space / Enter: Confirm. Esc: Cancel.",
-  "Close the polygon before pressing Space to confirm.": "Close the polygon before pressing Space to confirm."
+  "Close the polygon before pressing Space to confirm.": "Close the polygon before pressing Space to confirm.",
+  "Open a .cine, .dvapkg or .dvrpkg file.": "Open a .cine, .dvapkg or .dvrpkg file."
 }

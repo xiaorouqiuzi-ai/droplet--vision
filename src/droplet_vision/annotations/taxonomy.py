@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from ..resources import resource_path
 from typing import List, Union
 from .schema import AnnotationLabel
 
@@ -15,4 +16,4 @@ def load_taxonomy(path: Union[str, Path]) -> List[AnnotationLabel]:
 
 
 def default_taxonomy_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "configs/annotations/default_taxonomy.json"
+    return resource_path('configs/annotations/default_taxonomy.json')

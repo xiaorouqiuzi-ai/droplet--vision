@@ -1,6 +1,7 @@
 """Cine Viewer v1 shell for the future Droplet Annotation Workstation."""
 from __future__ import annotations
 from pathlib import Path
+from ..resources import output_path
 from dataclasses import replace
 from bisect import bisect_right
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -565,7 +566,7 @@ class MainWindow(QMainWindow):
         if self.current_record is None:
             return
         name = f"{Path(self.metadata.filename).stem}_frame_{self.current_record.frame_index:06d}.png"
-        output_dir = Path("outputs/viewer_frames")
+        output_dir = output_path('viewer_frames')
         output_dir.mkdir(parents=True, exist_ok=True)
         path, _ = QFileDialog.getSaveFileName(self, tr("Export Current Frame"), str(output_dir / name), "PNG (*.png)")
         if path:
@@ -593,7 +594,7 @@ class MainWindow(QMainWindow):
     def save_session_dialog(self):
         if self.session is None or self.review_manager.active:
             return
-        output_dir = Path("outputs/viewer_sessions")
+        output_dir = output_path('viewer_sessions')
         output_dir.mkdir(parents=True, exist_ok=True)
         path, _ = QFileDialog.getSaveFileName(self, tr("Save Session"), str(output_dir / (self.cine_path.stem + ".json")), "Session JSON (*.json)")
         if path:
@@ -603,7 +604,7 @@ class MainWindow(QMainWindow):
                 self._error(str(error))
 
     def load_session_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr("Load Session"), "outputs/viewer_sessions", "Session JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, tr("Load Session"), str(output_path('viewer_sessions')), "Session JSON (*.json)")
         if not path:
             return
         try:

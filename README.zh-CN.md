@@ -84,7 +84,17 @@ python scripts/launch_viewer.py
 激活环境后可使用 `launch_viewer.cmd` 启动。
 桌面快捷方式与外部 Python 环境的配置见[启动说明](docs/getting_started.md#launch)。
 本机解释器路径只应保存在本地设置中，不写入版本化配置。
-Windows 安装程序与文件关联仍在后续计划中。
+独立运行版本见下方 Windows 发行版说明。
+
+## Windows 发行版
+
+Windows 便携 ZIP 与安装器已构建为 Beta 候选版，供发布前审阅。
+公开版本请从 [GitHub Releases](https://github.com/xiaorouqiuzi-ai/droplet--vision/releases) 下载；
+草稿候选版在正式发布前不可公开下载。
+
+- **便携版：**完整解压后运行 `DropletVision.exe`。
+- **安装版：**提供快捷方式和标注包文件关联；`.cine` 关联可选。
+- 无需单独安装 Python。用户数据位置、卸载和源码构建方式见 [Windows 指南](docs/windows_release.md)。
 
 ## 核心工作流
 
@@ -250,7 +260,7 @@ git diff --check
 
 以下为规划方向，不承诺发布日期：
 
-- Windows 可分发程序/安装器与 `.dvapkg` 文件关联。
+- 扩大 Windows 干净环境验证范围，完善发行签名。
 - 数据集导出与 prediction import/provider 集成。
 - 分割基线、测量提取及基于 TIME64 的时序事件逻辑。
 
