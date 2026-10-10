@@ -81,6 +81,14 @@ def snapshot(document, frames):
     value['active_annotation_ids'] = sorted(active)
     value['deactivated_annotation_ids'] = sorted(keep-active)
     value['record_layers'] = {k:v for k,v in value['record_layers'].items() if k in keep}
+    # Copies carry their own raw geometry/provenance. Do not expand a sparse
+    # package merely to satisfy a template pointer outside its selected frames.
+    templates = {k:v for k,v in value.get('cine_templates', {}).items()
+                 if set(v['annotation_ids']) <= keep}
+    if templates:
+        value['cine_templates'] = templates
+    else:
+        value.pop('cine_templates', None)
     states = {r['record_id']:r for r in value['frame_state_records']}
     active_states = {k:v for k,v in value['active_frame_state_records'].items()
                      if int(k) in frames and (states[v]['source'] == 'manual'
@@ -94,7 +102,13 @@ def snapshot(document, frames):
     value['frame_state_records'] = [r for r in value['frame_state_records'] if r['record_id'] in keep_states]
     value['active_frame_state_records'] = active_states
     value['history'] = []  # Record ancestry is retained; unrelated run logs are not exported.
-    return AnnotationDocument.from_dict(value)
+    result = AnnotationDocument.from_dict(value)
+    # Materialize only selected package frames. Never change the canonical
+    # document or force the template's source frame into a sparse package.
+    for frame in sorted(frames):
+        for projection in document.support_projections(frame, package=True):
+            result.add_record(projection, 'manual')
+    return result
 
 
 class ReviewPackage:
@@ -267,6 +281,8 @@ class ReviewPackage:
                 raise ValueError('Original frame-state snapshot was overwritten')
             if doc.to_dict()['cine'] != base.to_dict()['cine'] or doc.scheme != base.scheme:
                 raise ValueError('Review cannot change Cine identity or scheme snapshot')
+            if doc.cine_templates != base.cine_templates:
+                raise ValueError('Review cannot change Cine templates')
             docs[cine], bases[cine] = doc, base
             base_ids = {r.annotation_id for r in base.records.records()}
             if any(r.source != 'manual' or r.review_status == 'ground_truth'

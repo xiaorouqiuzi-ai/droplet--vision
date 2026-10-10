@@ -52,7 +52,18 @@ def merge_review(local, package, resolutions=None):
     base_objects = {r.annotation_id:r for r in base.records.records()}
     remote_objects = {r.annotation_id:r for r in remote.records.records()}
     local_objects = {r.annotation_id:r for r in local.records.records()}
+    projections = {}
     for key, record in base_objects.items():
+        if record.source == 'imported' and record.attributes.get('creation_tool') == 'cine_template_projection':
+            source_id = record.attributes.get('template_source_annotation_id')
+            # Verify deterministic materialization against retained source history,
+            # even if the user has since changed the active template.
+            if source_id not in local_objects or local.support_projection(source_id, record.frame_index, package=True).to_dict() != record.to_dict():
+                raise ValueError('Invalid package template projection')
+            projections[key] = source_id
+            if key in local_objects and local_objects[key].to_dict() != record.to_dict():
+                raise ValueError('Local projection history was overwritten')
+            continue
         if key not in local_objects or local_objects[key].to_dict() != record.to_dict():
             raise ValueError('Local base record missing or overwritten; manual reconciliation required')
     base_states = {r.record_id:r for r in base.frame_state_records}
@@ -104,9 +115,16 @@ def merge_review(local, package, resolutions=None):
                 raise ValueError('Reviewer record ID collides with local content')
             continue
         parent = base_ancestor(key, remote_objects, base_objects)
-        changed = parent is not None and parent not in local.active_annotation_ids
-        local_rows = [r for r in local.active_records(row.frame_index)
-                      if parent and base_ancestor(r.annotation_id, local_objects, base_objects) == parent]
+        if parent in projections:
+            source_id = projections[parent]
+            local_rows = [r for r in local.support_copies(row.frame_index)
+                          if r.attributes.get('template_source_annotation_id') == source_id]
+            template = local.cine_templates.get('support_structure', {})
+            changed = bool(local_rows) or source_id not in template.get('annotation_ids', []) or not template.get('apply_entire_cine', False)
+        else:
+            changed = parent is not None and parent not in local.active_annotation_ids
+            local_rows = [r for r in local.active_records(row.frame_index)
+                          if parent and base_ancestor(r.annotation_id, local_objects, base_objects) == parent]
         choice = choose('object', key, parent, changed, local_rows, row)
         if choice in ('reviewer', 'both'):
             add_object(key, key in remote.active_annotation_ids and row.review_status != 'rejected')

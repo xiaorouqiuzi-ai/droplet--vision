@@ -155,28 +155,36 @@ class LayoutTests(unittest.TestCase):
         window.transport.fps.setCurrentText('20')
         self.assertEqual(window.playback.interval(), 50)
         self.assertEqual([window.transport.fps.itemText(i) for i in range(window.transport.fps.count())], ['1','2','5','10','15','20','30','60','120','240','500','1000'])
+        window.review_clock.now = lambda: 0.0
+        window.toggle_play()
+        window.review_clock.now = lambda: 0.05
         window._tick()
         wait_for(lambda: window.current_record.frame_index == 3090)
+        window.pause()
 
-    def test_1000_review_fps_single_frame_ticks_and_session_roundtrip(self):
+    def test_1000_review_speed_clock_progression_and_session_roundtrip(self):
         from droplet_vision.annotations import ViewerSession
         window = self.window
         window.transport.fps.setCurrentText('1000')
-        self.assertEqual(window.playback.interval(), 1)
+        self.assertEqual(window.playback.interval(), 16)
         self.assertEqual(window.controller.state.playback_fps, 1000)
+        window.review_clock.now = lambda: 0.0
+        window.toggle_play()
+        window.review_clock.now = lambda: 1.0
         window._tick()
-        wait_for(lambda: window.current_record.frame_index == 1)
+        wait_for(lambda: window.current_record.frame_index == 1000)
+        window.pause()
         self.assertIn(1000, window.transport.jump_buttons)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)/'session.json'
             window.save_session(path)
             session = ViewerSession.load(path)
-            self.assertEqual(session.ui_state['review_playback_fps'], 1000)
+            self.assertEqual(session.ui_state['review_speed_frames_per_second'], 1000)
             window.transport.fps.setCurrentText('10')
             window.open_cine('fake.cine', session)
             wait_for(lambda: window.current_record is not None)
             self.assertEqual(window.transport.fps.currentText(), '1000')
-            self.assertEqual(window.playback.interval(), 1)
+            self.assertEqual(window.playback.interval(), 16)
 
     def test_bilingual_names_stable_preset_and_compact_display_controls(self):
         window = self.window

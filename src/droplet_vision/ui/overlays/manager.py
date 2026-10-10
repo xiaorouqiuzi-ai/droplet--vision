@@ -57,7 +57,7 @@ class OverlayManager:
         self.by_id.clear()
         self.badges.clear()
 
-    def render(self, layers, cine_id, frame_index, colors=None):
+    def render(self, layers, cine_id, frame_index, colors=None, hidden=()):
         self.clear()
         records = [r for layer in layers for r in layer.annotations
                    if r.cine_id == cine_id and r.frame_index == frame_index]
@@ -67,7 +67,7 @@ class OverlayManager:
                 continue
             for record in layer.annotations:
                 renderer = self.renderers.get(record.geometry_type)
-                if record.cine_id != cine_id or record.frame_index != frame_index or renderer is None:
+                if record.cine_id != cine_id or record.frame_index != frame_index or renderer is None or record.annotation_id in hidden:
                     continue
                 color = (colors or {}).get(record.annotation_id, self.scene.palette().text().color().name())
                 pen = QPen(QColor(color), 1)

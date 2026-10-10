@@ -112,6 +112,9 @@ class AnnotationEditor(QObject):
         self.switch_tool("select")
         window.annotation_panel.label_changed.connect(self.label_changed)
         window.annotation_panel.annotation_selected.connect(self.select_from_list)
+        window.annotation_panel.visibility_changed.connect(self.set_record_visible)
+        window.annotation_panel.delete_requested.connect(self.delete_record)
+        window.annotation_panel.can_delete = self.can_delete
         window.layer_panel.changed.connect(self.layer_changed)
         self.autosave_timer = QTimer(self)
         self.autosave_timer.setInterval(30000)
@@ -146,6 +149,7 @@ class AnnotationEditor(QObject):
     def label_changed(self):
         if hasattr(self, "workflow"):
             self.workflow.instance_name.clear()
+            self.workflow.support_template.refresh()
         self.cancel()
         self.update_tools()
         label = self.window.annotation_panel.selected_label()
@@ -162,6 +166,7 @@ class AnnotationEditor(QObject):
         self.cancel()
         self.update_tools()
         self.select(self.selected_id)
+        self.workflow.support_template.refresh()
 
     def switch_tool(self, key):
         if self.tool is not None:
@@ -239,9 +244,49 @@ class AnnotationEditor(QObject):
     def selected_record(self):
         if self.document is not None and self.selected_id in self.document.active_annotation_ids:
             return self.document.records.get(self.selected_id)
+        return self.projections().get(self.selected_id)
+
+    def projections(self):
+        if self.document is None or self.window.current_record is None:
+            return {}
+        return {r.annotation_id:r for r in self.document.support_projections(self.window.current_record.frame_index)}
+
+    def hidden_ids(self):
+        session = self.window.session
+        values = session.ui_state.get('hidden_annotation_ids', []) if session else []
+        return {v for v in values if isinstance(v, str)} if isinstance(values, list) else set()
+
+    def set_record_visible(self, annotation_id, visible):
+        if self.window.session is None:
+            return
+        hidden = self.hidden_ids()
+        hidden.discard(annotation_id) if visible else hidden.add(annotation_id)
+        self.window.session.ui_state['hidden_annotation_ids'] = sorted(hidden)
+        self.window.refresh_overlays()
+
+    def can_delete(self, annotation_id):
+        if self.document is None or annotation_id not in self.document.active_annotation_ids:
+            return False
+        record = self.document.records.get(annotation_id)
+        return record.source != 'model' and self.can_edit(record)
+
+    def delete_record(self, annotation_id):
+        if not self.can_delete(annotation_id):
+            return
+        self.window.pause()
+        if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
+            self.select(annotation_id)
+            self.window.review_manager.decide('object', 'rejected')
+            return
+        self.cancel()
+        self.undo_stack.push(DeactivateAnnotationCommand(self.document, annotation_id, self.changed))
         return None
 
     def can_edit(self, record):
+        if record.annotation_id in self.projections():
+            layer = next((layer for layer in self.window.layers if layer.layer_id == 'manual'), None)
+            return bool(self.ready and layer and layer.visible and not layer.locked
+                        and not (getattr(self.window, 'review_manager', None) and self.window.review_manager.active))
         if not self.ready or self.document is None or record.annotation_id not in self.document.active_annotation_ids:
             return False
         layer_id = self.document.record_layers[record.annotation_id]
@@ -299,6 +344,25 @@ class AnnotationEditor(QObject):
         return True
 
     def edit_annotation(self, annotation_id, geometry, attributes=None):
+        projection = self.projections().get(annotation_id)
+        if projection is not None:
+            if not self.can_edit(projection):
+                return False
+            frame = self.window.current_record
+            values = deepcopy(projection.attributes)
+            values.update(attributes or {})
+            values.update(creation_tool='cine_support_template_override', raw_time64=frame.timestamp_time64,
+                          relative_timestamp_s=frame.timestamp_s, display_mode_used=self.window.display_panel.settings.mode)
+            record = AnnotationRecord(frame.cine_id, frame.frame_index, 'support_structure', 'polygon',
+                                      deepcopy(geometry), attributes=values)
+            try:
+                self.document.validate_record(record)
+            except ValueError as error:
+                self.message(str(error))
+                return False
+            self.selected_id = record.annotation_id
+            self.undo_stack.push(AddAnnotationCommand(self.document, record, 'manual', self.changed))
+            return True
         original = self.document.records.get(annotation_id)
         if not self.can_edit(original):
             self.message(tr("This annotation layer is locked or unavailable for editing."))
@@ -336,7 +400,10 @@ class AnnotationEditor(QObject):
             self.delete_vertex()
             return
         record = self.selected_record()
-        if record is not None and self.can_edit(record):
+        if record is not None and record.annotation_id in self.projections():
+            self.set_record_visible(record.annotation_id, False)
+            return
+        if record is not None and self.can_delete(record.annotation_id):
             if getattr(self.window, 'review_manager', None) and self.window.review_manager.active:
                 self.window.review_manager.decide('object', 'rejected')
                 return
@@ -423,7 +490,8 @@ class AnnotationEditor(QObject):
         if hasattr(self, 'workflow') and record is not None:
             self.workflow.instance_name.setText(record.attributes.get('instance_name', ''))
         self.tool_settings.refresh()
-        if record is None or not self.can_edit(record) or self.tool is None or self.tool.geometry_type is not None:
+        if (record is None or record.annotation_id in self.hidden_ids() or not self.can_edit(record)
+                or self.tool is None or self.tool.geometry_type is not None):
             return
         for index, point in enumerate(self.geometry_handles(record.geometry_type, record.geometry)):
             pen = QPen(QColor("#ffcc33"), 1)

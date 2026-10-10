@@ -185,6 +185,8 @@ project `planico.jpg`.
 
 ## Keyboard shortcuts
 
+See also the Cine-local reuse workflow below.
+
 | Key | Action |
 | --- | --- |
 | 1 / 2 / 4 / 5 | Select / Point / Polygon / Magic Wand |
@@ -199,3 +201,95 @@ project `planico.jpg`.
 | R / P / E | Raw / Ref90 / previous enhanced display |
 
 Related: [Viewer](cine_viewer.md) · [Label definitions](annotation_labeling_scheme_v1.md) · [Index](README.md).
+
+## Cine-level droplet support rod template
+
+The UI calls `support_structure` **载滴杆 / Droplet support rod**; the stable ID,
+semantic definition and Scheme color are unchanged. Static projection is an
+annotation convenience, not a scientific assertion of perfect immobility.
+
+1. Select the rod label and confirm one or more Polygon/Magic Wand annotations
+   on an unlocked Manual/Reviewed layer. Drafts and model-only records are not
+   eligible template sources.
+2. Check **应用全 Cine / Apply to entire Cine**. On first use this captures all
+   eligible current-frame rod polygons. An existing template is reused. The
+   controls show its source frame and count, and are completely hidden for
+   other object labels. Without a template or confirmed polygons the checkbox
+   is disabled.
+3. Navigate anywhere in this Cine: the Viewer projects the same immutable raw
+   geometry. It creates **no per-frame records**. The source annotations remain
+   ordinary active records, without duplicate overlays on their source frame.
+4. Uncheck to turn projection off. Template references, source records and any
+   local overrides remain intact. **Update Cine Support Rod Template** is the
+   explicit way to replace the source set; ordinary editing never updates it.
+5. Select a projected polygon and edit/rename it normally. The first committed
+   edit creates a manual **Frame override** on this frame; subsequent edits use
+   derived-record history. Its provenance contains
+   `creation_tool = cine_support_template_override`,
+   `template_source_annotation_id`, `template_source_frame_index`, and the
+   current frame's TIME64/relative timestamp. Cross-frame copies do not pretend
+   to be same-frame revisions: the first override has `derived_from = null`.
+6. Save the AnnotationDocument. The template, enabled state and overrides survive
+   reload and same-Cine queue navigation. Another Cine uses its own document.
+
+Set/update, enabling/disabling, local edits and deletion support Undo/Redo.
+Existing legacy per-frame template copies remain valid and take precedence over
+projection for their source rod. No migration or mass duplication is performed.
+
+The optional, backward-compatible metadata is:
+
+```json
+{
+  "cine_templates": {
+    "support_structure": {
+      "apply_entire_cine": true,
+      "source_frame_index": 966,
+      "annotation_ids": ["confirmed-record-id-1", "confirmed-record-id-2"]
+    }
+  }
+}
+```
+
+Missing `cine_templates` means no template. Missing `apply_entire_cine` means
+projection is off. References point to retained immutable records; an edited
+or deactivated source does not silently replace the stored template geometry.
+
+### Current annotation list actions
+
+The list separates **Frame annotations** from **Cine templates**. Projected rows
+are explicitly labelled *Cine template*, with the Scheme color and source name
+(or a display ordinal). Select them to create an independent local correction.
+
+Each row's small eye toggle hides/shows only that overlay. It does not change
+selection, active IDs, geometry, review status or Ground Truth. Visibility is
+stored in `ViewerSession.ui_state.hidden_annotation_ids`; save/open the Session
+separately to restore it. A template's visibility key remains stable across
+frames, so hiding one projected rod hides that rod throughout this session.
+It does not disable **Apply to entire Cine**, nor hide a separate local override.
+
+Right-click a real editable manual annotation and choose **Delete Annotation**
+to deactivate it through Undo/Redo; its historical record remains. Prediction
+and locked-layer deletion is disabled. In portable review mode, removal follows
+the existing reject/review-derivative policy. A projected row instead offers
+**Hide this template**, because it has no current-frame record to delete.
+Deleting a local override restores its global projection when enabled.
+
+Hidden real annotations still count for human timeline markers. Global template
+projections do **not** add markers to every frame: only real source/override/
+other human annotations and manual Frame States contribute. Counts also keep
+frame records separate from transient projections.
+
+### Portable review
+
+Export materializes geometry only for the package's selected target/context
+frames, without mutating the canonical document or forcing in the source frame.
+These package-only records use the existing `source = imported` schema value
+and `attributes.creation_tool = cine_template_projection`. They carry source
+record/frame provenance and deterministic IDs; no new scientific source enum
+is introduced. Materialized projections are not human-work timeline markers.
+
+Reviewer edits become manual reviewed frame-local override candidates on import.
+The original Cine template is never updated by review. Concurrent local overrides
+or a changed/disabled template require explicit conflict resolution. Template
+management is disabled in review mode. Raw pixels, TIME64 and Ref90 remain
+unchanged throughout this workflow.

@@ -55,7 +55,7 @@ interface example, not a validated physical interpretation of the image.
 | Left | Cine/timing/camera/current-frame information, display, Scheme, document location and current annotations |
 | Center | Raw-coordinate image canvas and editable overlays |
 | Right | Drawing layer, object buttons, tools, tool settings, Frame State and quality/notes |
-| Bottom | Human-annotation markers, timeline, fixed frame jumps and independent target playback FPS |
+| Bottom | Human-annotation markers, timeline, fixed frame jumps and independent Review Speed (frames/s) |
 
 Queue and bookmarks have separate docks. Menus: **File → Annotation → Queue →
 View → Model → Settings → Help**. 中文 is the default; the language button or
@@ -119,9 +119,13 @@ on opening. The left panel preserves full raw TIME64 integers.
 
 Use fixed ±1/10/100/1000 jumps, the timeline or spinbox. Click an upper annotation
 triangle to revisit a frame; hover for object/state details. Dense triangles
-select the represented frame nearest the current frame. Playback offers a
-**target** rate up to 1000 FPS, limited by decoding/rendering; it is neither a
-1000-frame jump nor experimental time. See [Viewer](docs/cine_viewer.md) and
+select the represented frame nearest the current frame. **Review Speed (frames/s)**
+controls source-frame progression per real second: 1000 advances approximately
+1000 Cine frames each second, without rendering every intermediate frame.
+High-speed review skips frames to keep up with elapsed monotonic time; slow I/O
+can still delay presentation. Pause/resume starts from the actual displayed frame,
+and manual navigation pauses playback. This is distinct from a one-off +1000 jump
+and never changes scientific TIME64. See [Viewer](docs/cine_viewer.md) and
 [Cine Reader](docs/cine_reader.md).
 
 ### Scientific Timing Policy
@@ -148,6 +152,10 @@ See [preprocessing policy](docs/image_preprocessing_policy.md) and
 [preset provenance](docs/photometric_presets.md).
 
 ## Annotation Workflow
+
+**Cine-level support-rod reuse:** project one template across the Cine without
+per-frame duplication, with independent local overrides and list visibility/deletion controls.
+See the [template workflow](docs/annotation_editor.md#cine-level-droplet-support-rod-template).
 
 ```text
 Apply Scheme → Drawing Layer → Object → Polygon / Magic Wand / Point

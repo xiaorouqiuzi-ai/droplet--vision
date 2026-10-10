@@ -11,6 +11,7 @@ def human_objects(document, layers, frame=None):
     roles = {layer.layer_id: layer.role for layer in layers}
     return [r for r in document.active_records(frame)
             if roles.get(document.record_layers[r.annotation_id]) in ('manual', 'reviewed', 'ground_truth')
+            and not (r.source == 'imported' and r.attributes.get('creation_tool') == 'cine_template_projection')
             and (r.source != 'model' or r.review_status in ('accepted', 'edited', 'ground_truth'))]
 
 

@@ -29,7 +29,12 @@ def validate_display(display, object_ids, state_ids):
         if not isinstance(style, dict) or style.get('mode') not in ('fixed', 'cycle'):
             raise ValueError('Unknown Scheme style mode')
         colors([style.get('color')] if style['mode'] == 'fixed' else style_colors(display, style))
-    for key, known in [('state_names', state_ids), ('object_display_names', object_ids)]:
+    prefixes = display.get('instance_prefixes', {})
+    if (not isinstance(prefixes, dict) or not set(prefixes) <= set(object_ids)
+            or not all(isinstance(value, str) and value.strip() for value in prefixes.values())):
+        raise ValueError('Invalid Scheme display instance_prefixes')
+    for key, known in [('state_names', state_ids), ('object_display_names', object_ids),
+                       ('object_descriptions', object_ids)]:
         names = display.get(key, {})
         if not isinstance(names, dict) or not set(names) <= set(known):
             raise ValueError('Unknown display name in ' + key)
@@ -59,6 +64,8 @@ def resolve_display(scheme, runtime=False):
             display['object_order'] = [k for k in display['object_order'] if k in objects]
             display['object_styles'] = {k:v for k,v in display['object_styles'].items() if k in objects}
             display['object_display_names'] = {k:v for k,v in display.get('object_display_names', {}).items() if k in objects}
+            for key in ('instance_prefixes', 'object_descriptions'):
+                display[key] = {k:v for k,v in display.get(key, {}).items() if k in objects}
         return validate_display(display, objects, states), None
     except (ValueError, TypeError, KeyError, OSError) as error:
         warning = 'Invalid Scheme display configuration: ' + str(error)

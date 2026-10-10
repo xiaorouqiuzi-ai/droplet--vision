@@ -110,6 +110,16 @@ class CineController(QObject):
             return index, pixels, self._reader.build_frame_result(index)
         self._schedule(token, "frame", work)
 
+    @property
+    def busy(self):
+        return self._task is not None or self._pending is not None
+
+    def cancel_frame_requests(self, displayed_index):
+        """Pause invalidates in-flight pixels without interrupting reader I/O."""
+        self.state.request(displayed_index)
+        if self._pending is not None and self._pending[1] == "frame":
+            self._pending = None
+
     def close(self):
         self.state.frame_count = 0
         self._invalidate_reference()

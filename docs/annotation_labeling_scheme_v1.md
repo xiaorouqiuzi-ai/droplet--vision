@@ -32,7 +32,7 @@ Frame State 必须支持多选，不要求所有状态彼此互斥。Stable ID �
 | `daughter_droplet` | 子液滴 | Polygon / Point |
 | `flame` | 火焰 | Polygon |
 | `soot` | 烟炱 | Polygon |
-| `support_structure` | 支撑结构 | Polygon / BBox |
+| `support_structure` | 载滴杆 | Polygon / BBox |
 
 ### `parent_droplet` — 父液滴
 
@@ -73,11 +73,13 @@ Object 层只描述可见结构，不自动声明其物理身份；亮区或暗�
 
 `soot` 是 spatial object；`sooting` 是 frame state。前者记录烟炱在哪里，后者记录是否正在表现烟炱生成行为。
 
-### `support_structure` — 支撑结构
+### `support_structure` — 载滴杆（Droplet support rod）
 
-含义：热电偶、支撑丝、悬挂结构或其他可能干扰视觉识别的固定实验结构。
+含义：实验中用于承载或固定液滴的细杆状结构。可能表现为单根细杆、两根缠绕或并列细杆、较钝的末端，液滴可附着于杆端。内部 stable ID 仍为 `support_structure`，既有标注无需迁移。
 
-推荐 Polygon / BBox。标注目的是避免模型将实验结构误识别为液滴或碎片。
+推荐 Polygon / BBox；Cine-level reusable template 使用已确认的 Polygon。标注目的是避免模型将载滴杆误识别为液滴或碎片。
+
+同一个 Cine 中其位置和几何形态通常基本保持不变，因此软件允许将一根或多根已标注载滴杆作为本 Cine 的可复用模板，在全 Cine 动态投影，并在需要微调的当前帧创建独立覆盖。这不意味着载滴杆在数学意义上完全静止，也不是自动写入 Measurement 的物理结论。操作见 [载滴杆模板](annotation_editor.md#cine-level-droplet-support-rod-template)。
 
 ## 3. 第二层：Frame Phenomenon / State
 

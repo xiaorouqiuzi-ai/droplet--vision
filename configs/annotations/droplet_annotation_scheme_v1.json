@@ -18,8 +18,8 @@
     "support_structure": "Support"
   },
   "display": {
-    "revision": 2,
-    "description": "Workspace v1.6 display revision; semantic scheme v1.0 unchanged.",
+    "revision": 3,
+    "description": "Support rod display rename and naming preferences; semantic IDs and palette unchanged.",
     "palette": [
       "#3B6FB6",
       "#2A9D8F",
@@ -148,12 +148,21 @@
         "en_US": "Flame"
       },
       "support_structure": {
-        "zh_CN": "支撑结构",
-        "en_US": "Support structure"
+        "zh_CN": "载滴杆",
+        "en_US": "Droplet support rod"
       },
       "soot": {
         "zh_CN": "烟炱",
         "en_US": "Soot"
+      }
+    },
+    "instance_prefixes": {
+      "support_structure": "SupportRod"
+    },
+    "object_descriptions": {
+      "support_structure": {
+        "zh_CN": "用于承载或固定液滴的细杆状结构；同一 Cine 内通常近似静态。",
+        "en_US": "Thin rod-like structures carrying or fixing a droplet, usually approximately static within a Cine."
       }
     }
   }

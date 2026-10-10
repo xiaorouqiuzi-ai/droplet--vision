@@ -1,6 +1,8 @@
 """Cine Viewer v1 shell for the future Droplet Annotation Workstation."""
 from __future__ import annotations
 from pathlib import Path
+from dataclasses import replace
+from bisect import bisect_right
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
@@ -15,6 +17,7 @@ from .display import export_png
 from .widgets.image_canvas import ImageCanvas
 from .widgets.timeline import Timeline
 from .widgets.transport_controls import TransportControls, REVIEW_PLAYBACK_FPS
+from .review_playback import ReviewPlayback
 from .panels.metadata_panel import MetadataPanel
 from .panels.annotation_data_panel import AnnotationDataPanel
 from .panels.annotation_panel import AnnotationPanel
@@ -87,6 +90,7 @@ class MainWindow(QMainWindow):
         self.bookmarks_dock.hide()
         self.timeline = Timeline()
         self.timeline.requested.connect(self.navigate)
+        self.timeline.slider.sliderPressed.connect(self.pause)
         self.transport = TransportControls()
         self.transport.step.connect(self.step)
         self.transport.first.connect(lambda: self.navigate(0))
@@ -103,6 +107,8 @@ class MainWindow(QMainWindow):
         self.display_panel.changed.connect(self.refresh_display)
         self.display_panel.recalculate_requested.connect(self.controller.recalculate_reference)
         self.playback = QTimer(self)
+        self.review_clock = ReviewPlayback()
+        self._review_desired = None
         self.playback.setInterval(100)
         self.playback.timeout.connect(self._tick)
         self.controller.opened.connect(self._opened)
@@ -239,7 +245,10 @@ class MainWindow(QMainWindow):
             if self.current_record is not None:
                 records = [a for layer in self.layers for a in layer.annotations
                            if a.cine_id == self.current_record.cine_id and a.frame_index == self.current_record.frame_index]
-                self.annotation_panel.set_records(records, record_colors(self.annotation_panel.display_config, records))
+                projections = list(self.editor.projections().values())
+                records += projections
+                self.annotation_panel.set_records(records, record_colors(self.annotation_panel.display_config, records),
+                                                  self.editor.hidden_ids(), {r.annotation_id for r in projections})
                 self.annotation_panel.select_record(self.editor.selected_record())
                 record = self.current_record
                 value = 'unknown' if record.timestamp_s is None else f'{record.timestamp_s:.9f} s'
@@ -304,7 +313,8 @@ class MainWindow(QMainWindow):
                 if pending.ui_state.get('language') in ('zh_CN', 'en_US'):
                     self.change_language(pending.ui_state['language'])
                 self.canvas.set_auto_fit(pending.ui_state.get('auto_fit_to_view', True))
-                fps = pending.ui_state.get("review_playback_fps", 10)
+                fps = pending.ui_state.get("review_speed_frames_per_second",
+                                           pending.ui_state.get("review_playback_fps", 10))
                 if fps in REVIEW_PLAYBACK_FPS:
                     self.transport.fps.setCurrentText(str(fps))
                 try:
@@ -324,6 +334,7 @@ class MainWindow(QMainWindow):
         self.refresh_display()
 
     def navigate(self, index):
+        self.pause()
         if self.metadata is None:
             return
         index = self.controller.state.clamp(index)
@@ -331,7 +342,8 @@ class MainWindow(QMainWindow):
             self.controller.request_frame(index)
             return
         cancelled = self.editor.frame_will_change()
-        self.timeline.set_frame(index)
+        if self.current_record is not None:
+            self.timeline.set_frame(self.current_record.frame_index)
         self.statusBar().showMessage((tr("Unfinished drawing cancelled; ") if cancelled else "") + tr("Loading frame ") + str(index))
         self.controller.request_frame(index)
 
@@ -356,7 +368,9 @@ class MainWindow(QMainWindow):
         self.refresh_overlays()
         if self.controller.photometric_error:
             self.statusBar().showMessage(tr("PHOTOMETRIC_REFERENCE_FAILED: Photometric Ref90 unavailable; Raw display used."))
-        if index == self.metadata.frame_count - 1:
+        if self.review_clock.active:
+            self._review_status()
+        if index == self._playback_last_frame():
             self.pause()
 
     def refresh_display(self, settings=None):
@@ -390,34 +404,89 @@ class MainWindow(QMainWindow):
             record = self.current_record
             records = [a for layer in self.layers for a in layer.annotations
                        if a.cine_id == record.cine_id and a.frame_index == record.frame_index]
+            projections = list(self.editor.projections().values()) if hasattr(self, 'editor') else []
+            hidden = self.editor.hidden_ids() if hasattr(self, 'editor') else set()
+            records += projections
             colors = record_colors(self.annotation_panel.display_config, records)
-            self.canvas.overlays.render(self.layers, record.cine_id, record.frame_index, colors)
-            self.annotation_panel.set_records(records, colors)
+            layers = [replace(layer, annotations=list(layer.annotations) + (projections if layer.layer_id == 'manual' else []))
+                      for layer in self.layers]
+            self.canvas.overlays.render(layers, record.cine_id, record.frame_index, colors, hidden)
+            self.annotation_panel.set_records(records, colors, hidden, {r.annotation_id for r in projections})
             if hasattr(self, "editor"):
                 self.editor.refresh_selection()
 
     def toggle_play(self):
-        if self.playback.isActive():
+        if self.review_clock.active:
             self.pause()
-        elif self.metadata is not None and self.controller.state.frame_index < self.metadata.frame_count - 1:
+        elif self.current_record is not None and self.current_record.frame_index < self._playback_last_frame():
+            self.timeline.debounce.stop()
+            self.timeline.set_frame(self.current_record.frame_index)
+            cancel = getattr(self.controller, 'cancel_frame_requests', None)
+            if cancel is not None:
+                cancel(self.current_record.frame_index)
+            self.editor.frame_will_change()
+            self.review_clock.start(self.current_record.frame_index, self.controller.state.playback_fps)
             self.playback.start()
             self.transport.play.setText(tr("Pause"))
+            self._review_status()
 
     def pause(self):
+        was_playing = self.review_clock.active
+        self.review_clock.stop()
         self.playback.stop()
+        self._review_desired = None
+        if was_playing and self.current_record is not None:
+            cancel = getattr(self.controller, 'cancel_frame_requests', None)
+            if cancel is not None:
+                cancel(self.current_record.frame_index)
+            if not self.editor.ready:
+                self.editor.frame_loaded()
         self.transport.play.setText(tr("Play"))
 
     def set_playback_fps(self, fps):
         if fps not in REVIEW_PLAYBACK_FPS:
             raise ValueError("Unsupported review playback speed")
         self.controller.state.playback_fps = fps
-        self.playback.setInterval(round(1000 / fps))
+        # Poll at no more than about 60 Hz, regardless of source-frame speed.
+        self.playback.setInterval(max(16, round(1000 / fps)))
+        if self.review_clock.active and self.current_record is not None:
+            self.pause()
+            self.toggle_play()
+
+    def _playback_last_frame(self):
+        if self.review_manager.active:
+            return self.review_manager.provider.available(self.review_manager.cine_id)[-1]
+        return self.metadata.frame_count - 1 if self.metadata is not None else 0
+
+    def _review_status(self):
+        if self.current_record is None:
+            return
+        rate = self.controller.state.playback_fps
+        text = tr('Review speed: {rate} frames/s | Frame: {frame} / {last}').format(
+            rate=rate, frame=self.current_record.frame_index, last=self.metadata.frame_count - 1)
+        if rate >= 60:
+            text += ' | ' + tr('High-speed frame skipping: enabled')
+        self.statusBar().showMessage(text)
 
     def _tick(self):
-        if self.metadata is None or self.controller.state.frame_index >= self.metadata.frame_count - 1:
+        if not self.review_clock.active or self.metadata is None or self.current_record is None:
+            return
+        desired = self.review_clock.desired_frame(self.metadata.frame_count)
+        if self.review_manager.active:
+            available = self.review_manager.provider.available(self.review_manager.cine_id)
+            desired = available[max(0, bisect_right(available, desired) - 1)]
+        self._review_desired = desired  # One replaceable target, not a FIFO.
+        # Backpressure: let the admitted decode complete rather than repeatedly
+        # invalidating it and starving presentation on slow disks. Manual seeks
+        # and Pause still invalidate old tokens. The next idle tick samples the
+        # latest clock target, dropping all intermediate unrequested frames.
+        if getattr(self.controller, 'busy', False):
+            return
+        if desired != self.current_record.frame_index:
+            self.editor.frame_will_change()
+            self.controller.request_frame(desired)
+        elif desired >= self._playback_last_frame():
             self.pause()
-        elif not self.timeline.debounce.isActive() and self.current_record is not None and self.current_record.frame_index == self.controller.state.frame_index:
-            self.step(1)  # do not race ahead when disk decoding is slower than review playback
 
     def close_cine(self):
         if not self.editor.confirm_discard():
@@ -485,7 +554,8 @@ class MainWindow(QMainWindow):
     def save_session(self, path):
         if self.session is None:
             raise ValueError("No Cine session")
-        self.session.ui_state.update(review_playback_fps=self.controller.state.playback_fps,
+        self.session.ui_state.pop('review_playback_fps', None)
+        self.session.ui_state.update(review_speed_frames_per_second=self.controller.state.playback_fps,
                                      language=current_language(),
                                      display=self.display_panel.settings.to_dict(),
                                      auto_fit_to_view=self.canvas.auto_fit_enabled)

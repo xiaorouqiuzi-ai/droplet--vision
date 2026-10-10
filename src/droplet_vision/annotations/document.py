@@ -38,6 +38,7 @@ class AnnotationDocument:
         self._frame_states = {}
         self._active_frame_states = {}
         self.scheme = {}
+        self._cine_templates = {}
         self._revision = self._saved_revision = 0
 
     @property
@@ -93,6 +94,8 @@ class AnnotationDocument:
                       created_at=_now(), updated_at=_now())
         if geometry is not None:
             values["geometry"] = _json_copy(geometry)
+        if original.source == 'imported' and original.attributes.get('creation_tool') == 'cine_template_projection':
+            values['attributes']['creation_tool'] = 'cine_support_template_override'
         derived = AnnotationRecord.from_dict(values)
         self.validate_record(derived)
         return derived
@@ -103,6 +106,112 @@ class AnnotationDocument:
 
     def annotated_frames(self):
         return sorted({r.frame_index for r in self.active_records()} | set(self._active_frame_states))
+
+    @property
+    def cine_templates(self):
+        return _json_copy(self._cine_templates)
+
+    def _validate_templates(self, value):
+        value = _json_copy(value)
+        if not isinstance(value, dict) or set(value) - {'support_structure'}:
+            raise ValueError('Invalid Cine template metadata')
+        for template in value.values():
+            if not isinstance(template, dict):
+                raise ValueError('Invalid support rod template')
+            if type(template.get('apply_entire_cine', False)) is not bool:
+                raise ValueError('apply_entire_cine must be boolean')
+            frame, ids = template.get('source_frame_index'), template.get('annotation_ids')
+            if (type(frame) is not int or not 0 <= frame < self.frame_count
+                    or not isinstance(ids, list) or not ids
+                    or not all(isinstance(key, str) for key in ids) or len(set(ids)) != len(ids)):
+                raise ValueError('Invalid support rod template source')
+            for key in ids:
+                if key not in self.record_layers:
+                    raise ValueError('Missing support rod template record')
+                record = self.records.get(key)
+                if (record.frame_index != frame or record.label_id != 'support_structure'
+                        or record.geometry_type != 'polygon' or record.source != 'manual'):
+                    raise ValueError('Template requires confirmed manual support rod polygons')
+        return value
+
+    def replace_cine_templates(self, value):
+        """Explicit template update/undo; edits to source records never call this."""
+        self._cine_templates = self._validate_templates(value)
+        self._touch('cine_templates', templates=self.cine_templates)
+
+    def support_template_from(self, annotation_ids):
+        ids = list(annotation_ids)
+        if not ids or not set(ids) <= self.active_annotation_ids:
+            raise ValueError('Select confirmed active support rod polygons')
+        frame = self.records.get(ids[0]).frame_index
+        return self._validate_templates({'support_structure': {
+            'source_frame_index': frame, 'annotation_ids': ids}})
+
+    def support_copies(self, frame_index):
+        return [r for r in self.active_records(frame_index)
+                if r.label_id == 'support_structure'
+                and r.attributes.get('creation_tool') in (
+                    'cine_support_template', 'cine_support_template_override', 'cine_template_projection')]
+
+    def support_projection(self, source_id, frame_index, package=False):
+        """Independent transient view, never inserted into this document's store.
+
+        Package snapshots use deterministic, frame-specific IDs; viewer IDs are
+        stable across frames so session visibility can hide one template rod.
+        """
+        from uuid import uuid5, NAMESPACE_URL
+        source = self.records.get(source_id)
+        if source.label_id != 'support_structure' or source.geometry_type != 'polygon' or source.source != 'manual':
+            raise ValueError('Invalid support projection source')
+        row = AnnotationRecord(self.cine_id, frame_index, 'support_structure', 'polygon',
+                               _json_copy(source.geometry), source='imported' if package else 'manual',
+                               annotation_id=(str(uuid5(NAMESPACE_URL, f'{self.document_id}:{source_id}:{frame_index}:support-projection'))
+                                              if package else 'cine-template:' + source_id),
+                               created_at=source.created_at, updated_at=source.updated_at,
+                               attributes={'creation_tool': 'cine_template_projection',
+                                           'template_source_annotation_id': source_id,
+                                           'template_source_frame_index': source.frame_index,
+                                           'instance_name': source.attributes.get('instance_name', '')})
+        self.validate_record(row)
+        return row
+
+    def support_projections(self, frame_index, package=False):
+        template = self._cine_templates.get('support_structure', {})
+        if not template.get('apply_entire_cine', False):
+            return []
+        active = self.active_records(frame_index)
+        replaced = {r.attributes.get('template_source_annotation_id') for r in self.support_copies(frame_index)}
+        # A same-frame derived edit of a source also takes precedence.
+        for record in active:
+            key = record.annotation_id
+            while key:
+                replaced.add(key)
+                key = self.records.get(key).derived_from
+        return [self.support_projection(key, frame_index, package) for key in template['annotation_ids']
+                if key not in replaced]
+
+    def make_support_copies(self, frame_index, attributes=None):
+        """Build independent records; caller commits the batch via Undo commands."""
+        if type(frame_index) is not int or not 0 <= frame_index < self.frame_count:
+            raise ValueError('Invalid target frame')
+        template = self._cine_templates.get('support_structure')
+        if template is None:
+            raise ValueError('No Cine support rod template')
+        copied = {r.attributes.get('template_source_annotation_id') for r in self.support_copies(frame_index)}
+        result = []
+        for number, key in enumerate(template['annotation_ids'], 1):
+            if key in copied:
+                continue
+            original = self.records.get(key)
+            values = _json_copy(attributes or {})
+            values.update(instance_name=original.attributes.get('instance_name') or f'SupportRod_{number:02d}',
+                          creation_tool='cine_support_template', template_source_annotation_id=key,
+                          template_source_frame_index=template['source_frame_index'])
+            record = AnnotationRecord(self.cine_id, frame_index, 'support_structure', 'polygon',
+                                      _json_copy(original.geometry), source='manual', attributes=values)
+            self.validate_record(record)
+            result.append(record)
+        return result
 
     @property
     def frame_state_records(self):
@@ -153,6 +262,7 @@ class AnnotationDocument:
             "deactivated_annotation_ids": sorted(self.deactivated_annotation_ids),
             "record_layers": self.record_layers,
             "scheme": self.scheme,
+            **({'cine_templates': self.cine_templates} if self._cine_templates else {}),
             "frame_state_records": [r.to_dict() for r in self.frame_state_records],
             "active_frame_state_records": {str(k): v for k, v in self._active_frame_states.items()},
             "records": [r.to_dict() for r in self.records.records()], "history": self.history})
@@ -189,6 +299,7 @@ class AnnotationDocument:
                     raise ValueError("Derived history crosses frame boundaries")
         doc._active = set(active)
         doc.record_layers = layers
+        doc._cine_templates = doc._validate_templates(value.get('cine_templates', {}))
         doc.document_id = value["document_id"]
         doc.created_at, doc.updated_at = value["created_at"], value["updated_at"]
         doc.history = []

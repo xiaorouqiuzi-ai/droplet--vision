@@ -51,12 +51,32 @@ Software regression cannot establish experimental timing validity. See the
 | Home / End | First / last frame |
 | Slider / spinbox | Seek frame index; slider requests debounce for 50 ms |
 | Upper human marker | Click to jump; hover for object/state information |
-| Space / Play | Toggle sequential review playback |
+| Space / Play | Toggle wall-clock-based review playback |
 
-Target Review FPS offers 1, 2, 5, 10, 15, 20, 30, 60, 120, 240, 500, 1000;
-default 10. Playback advances by one frame, waits for decode and stops at the end.
-Actual speed depends on disk, decoding, cache and rendering. FPS is independent
-of jump buttons, header FPS and scientific timestamps; 1000 FPS is a target, not a guarantee.
+**Review Speed (frames/s) / 检阅速度（帧/秒）** offers 1, 2, 5, 10, 15, 20, 30,
+60, 120, 240, 500, 1000; default 10. The value means source frames advanced per
+real second, not displayed images per second or experimental acquisition FPS.
+
+On Play, the Viewer records the displayed frame and a monotonic clock origin.
+The next target is `start_frame + floor(elapsed_seconds * review_speed)`, clamped
+to the Cine range. At 1000 frames/s, five real seconds means approximately +5000
+source frames; a 32196-frame Cine takes about 32.2 seconds to scan from frame 0,
+plus any final decode delay. The GUI need not render 32196 images.
+
+The timer polls at up to approximately 60 Hz. While a decode is busy, only one
+latest clock target is retained; no intermediate-frame request queue is built.
+An admitted decode may finish and display while the clock advances. The next
+idle tick requests the newest target, preventing slow I/O from starving display.
+Requests invalidated by Pause, manual seeks or Cine changes are ignored on return.
+High-speed review may skip intermediate frames to maintain the requested scan rate;
+low rates are generally frame-by-frame, but can also skip after stalls.
+
+The timeline, frame label and TIME64 metadata reflect successfully presented
+frames. Pause invalidates pending playback results. Resume resets the origin to
+the currently displayed frame; changing speed also resets this origin. Timeline,
+marker and fixed jump navigation pause review. The final frame is displayed and
+playback stops without wrapping. +1000 jumps and 1000 frames/s remain independent.
+This UI setting never computes or modifies scientific timestamps or annotations.
 
 Upper markers retain native slider behavior outside their 15-pixel hit width
 and top strip. Same-column markers are painted once; click selects the represented
@@ -126,6 +146,8 @@ not Object annotations or Ground Truth.
 Ctrl+S saves ViewerSession, normally under `outputs/viewer_sessions/`. Ctrl+L
 loads it and asks for the matching Cine when needed. It retains last frame,
 bookmarks, notes, display and playback/view preferences, without annotation records.
+New sessions store `ui_state.review_speed_frames_per_second`; sessions containing
+the legacy `review_playback_fps` key still load. The new key takes precedence.
 Cine filename/size/count checks are not a whole-file hash. Reopening recalculates
 the Cine reference rather than trusting an old saved gain against changed input.
 

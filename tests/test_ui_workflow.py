@@ -203,7 +203,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertFalse(self.editor.confirm_discard())
         self.assertEqual(self.editor.document.frame_state(0).notes, 'unsaved notes')
 
-    def test_all_jumps_clamp_and_sequential_fps(self):
+    def test_all_jumps_clamp_and_review_speed(self):
         transport = self.window.transport
         for delta in transport.jump_buttons:
             self.window.navigate(1500)
@@ -217,8 +217,12 @@ class WorkflowTests(unittest.TestCase):
         wait_for(lambda: self.editor.ready)
         self.assertEqual(self.window.current_record.frame_index, 0)
         transport.fps.setCurrentText('1000')
+        self.window.review_clock.now = lambda: 0.0
+        self.window.toggle_play()
+        self.window.review_clock.now = lambda: 0.001
         self.window._tick()
         wait_for(lambda: self.window.current_record.frame_index == 1)
+        self.window.pause()
         transport.jump_buttons[1000].click()
         wait_for(lambda: self.window.current_record.frame_index == 1001)
         self.assertEqual(transport.fps.currentText(), '1000')
@@ -269,8 +273,12 @@ class RealWorkflowTests(unittest.TestCase):
             window.transport.jump_buttons[-1000].click()
             wait_for(lambda: window.current_record.frame_index == index)
             window.transport.fps.setCurrentText('1000')
+            window.review_clock.now = lambda: 0.0
+            window.toggle_play()
+            window.review_clock.now = lambda: 0.001
             window._tick()
             wait_for(lambda: window.current_record.frame_index == index+1)
+            window.pause()
             window.close()
             window = MainWindow()
             window.open_cine(path)

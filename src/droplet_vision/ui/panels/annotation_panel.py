@@ -1,14 +1,16 @@
 from ..i18n import tr, current_language
-from PySide6.QtGui import QIcon, QPixmap, QColor
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QPen
 from ...annotations.display_style import label_color, ordered_ids, record_ordinals
 from ..widgets.wrapped_label import WrappedLabel
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QGroupBox, QButtonGroup, QToolButton, QSizePolicy
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QGroupBox, QButtonGroup, QToolButton, QSizePolicy, QMenu
 
 
 class AnnotationPanel(QWidget):
     label_changed = Signal()
     annotation_selected = Signal(object)
+    visibility_changed = Signal(str, bool)
+    delete_requested = Signal(str)
 
     def __init__(self, labels, parent=None):
         super().__init__(parent)
@@ -48,6 +50,11 @@ class AnnotationPanel(QWidget):
         self.count = WrappedLabel(tr("Current frame annotations: 0"))
         records_layout.addWidget(self.count)
         self.items = QListWidget()
+        self.eye_buttons = {}
+        self.projection_ids = set()
+        self.can_delete = lambda key: False
+        self.items.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.items.customContextMenuRequested.connect(self.show_context_menu)
         self.items.setWordWrap(True)
         self.items.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.items.setFixedHeight(100)
@@ -64,8 +71,12 @@ class AnnotationPanel(QWidget):
         self.label_changed.emit()
 
     def label_name(self, label):
-        return self.display_config.get('object_display_names', {}).get(label.label_id, {}).get(
+        name = self.display_config.get('object_display_names', {}).get(label.label_id, {}).get(
             current_language(), tr(label.display_name))
+        # Old frozen package/scheme snapshots keep their stored provenance.
+        if label.label_id == 'support_structure' and name in ('Support structure', '支撑结构'):
+            return tr('Droplet support rod')
+        return name
 
     def retranslate(self):
         # Do not emit label_changed: it cancels the current drawing draft.
@@ -128,25 +139,72 @@ class AnnotationPanel(QWidget):
                 self.labels.setCurrentRow(i)
                 break
 
-    def set_records(self, records, colors=None):
-        self.count.setText(tr("Current frame annotations: ") + str(len(records)))
+    def set_records(self, records, colors=None, hidden=(), projections=()):
+        self.projection_ids = set(projections)
+        self.count.setText(tr('Frame annotations: {count} | Cine templates: {templates}').format(
+            count=len(records)-len(projections), templates=len(projections)))
         blocker = QSignalBlocker(self.items)
         self.items.clear()
+        self.eye_buttons.clear()
         ordinals = record_ordinals(records)
+        template_numbers = {record.annotation_id: index for index, record in enumerate(
+            (record for record in records if record.annotation_id in projections), 1)}
         for record in records:
             label = self.taxonomy.get(record.label_id)
             name = self.label_name(label) if label else tr('Unknown / Legacy') + ': ' + record.label_id
             instance = record.attributes.get('instance_name', '')
             title = f"{instance} · {name}" if instance else name
+            if not instance and record.annotation_id in template_numbers:
+                title += f' {template_numbers[record.annotation_id]}'
             if record.label_id == 'daughter_droplet':
                 title += f' #{ordinals[record.annotation_id]}'
-            self.items.addItem(f"{title}\n{record.geometry_type} · {record.source}")
+            detail = tr('Cine template') if record.annotation_id in projections else (
+                tr('Frame override') if record.attributes.get('creation_tool') == 'cine_support_template_override' else record.source)
+            text = f"{title}\n{record.geometry_type} · {detail}"
+            self.items.addItem(text)
             item = self.items.item(self.items.count()-1)
             item.setData(Qt.ItemDataRole.UserRole, record.annotation_id)
             color = (colors or {}).get(record.annotation_id, label_color(self.display_config, record.label_id))
             item.setIcon(color_icon(color))
             item.setData(Qt.ItemDataRole.UserRole + 1, color)
+            row = QWidget()
+            row.setAutoFillBackground(True)
+            layout = QHBoxLayout(row)
+            layout.setContentsMargins(3,2,3,2)
+            title_label = QLabel(text)
+            title_label.setWordWrap(True)
+            title_label.setMinimumWidth(0)
+            title_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            layout.addWidget(title_label, 1)
+            eye = QToolButton()
+            eye.setCheckable(True)
+            eye.setChecked(record.annotation_id not in hidden)
+            eye.setIcon(visibility_icon(eye.isChecked(), self.palette().text().color()))
+            eye.setToolTip(tr('Visible') if eye.isChecked() else tr('Hidden'))
+            eye.setAccessibleName(tr('Visible') + ': ' + title)
+            eye.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            eye.clicked.connect(lambda checked, key=record.annotation_id: self.visibility_changed.emit(key, checked))
+            layout.addWidget(eye)
+            self.eye_buttons[record.annotation_id] = eye
+            item.setSizeHint(row.sizeHint())
+            self.items.setItemWidget(item, row)
         del blocker
+
+    def context_menu(self, annotation_id):
+        menu = QMenu(self)
+        if annotation_id in self.projection_ids:
+            menu.addAction(tr('Hide this template'), lambda: self.visibility_changed.emit(annotation_id, False))
+        else:
+            action = menu.addAction(tr('Delete Annotation'), lambda: self.delete_requested.emit(annotation_id))
+            action.setEnabled(self.can_delete(annotation_id))
+        return menu
+
+    def show_context_menu(self, position):
+        item = self.items.itemAt(position)
+        if item is not None:
+            menu = self.context_menu(item.data(Qt.ItemDataRole.UserRole))
+            menu.exec(self.items.viewport().mapToGlobal(position))
+            menu.deleteLater()
 
     def select_record(self, record):
         blocker = QSignalBlocker(self.items)
@@ -164,8 +222,30 @@ class AnnotationPanel(QWidget):
                                  f"Confidence: {record.confidence}\nDerived from: {record.derived_from}"))
         del blocker
 
+        for i in range(self.items.count()):
+            item = self.items.item(i)
+            row = self.items.itemWidget(item)
+            if row is not None:
+                row.setStyleSheet('background: palette(highlight); color: palette(highlighted-text);'
+                                 if item.isSelected() else '')
+
 
 def color_icon(color):
     pixmap = QPixmap(12,12)
     pixmap.fill(QColor(color))
+    return QIcon(pixmap)
+
+
+def visibility_icon(visible, color):
+    pixmap = QPixmap(18,18)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(color, 1.5))
+    painter.drawEllipse(1,5,16,8)
+    painter.setBrush(color)
+    painter.drawEllipse(7,7,4,4)
+    if not visible:
+        painter.drawLine(2,2,16,16)
+    painter.end()
     return QIcon(pixmap)

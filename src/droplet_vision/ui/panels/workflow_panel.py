@@ -123,6 +123,9 @@ class WorkflowPanel:
         self.auto_name.clicked.connect(self.suggest_name)
         self.rename_button.clicked.connect(self.rename)
         self.instance_name.returnPressed.connect(self.rename)
+        from .support_template_panel import SupportTemplateControls
+        self.support_template = SupportTemplateControls(editor)
+        object_layout.addWidget(self.support_template)
 
         self.state_group = QGroupBox(tr('Frame State (multiple selection)'))
         self.state_layout = QVBoxLayout(self.state_group)
@@ -163,6 +166,7 @@ class WorkflowPanel:
             self.checkboxes[row['state_id']].setText(self.state_name(row))
         self._more_summary()
         self.panel.retranslate()
+        self.support_template.refresh()
 
     def configure_display(self):
         review = getattr(self.window, 'review_manager', None)
@@ -283,6 +287,7 @@ class WorkflowPanel:
             self.commit_state()
 
     def refresh(self):
+        self.support_template.refresh()
         self.refreshing = True
         try:
             ready = self.editor.ready and self.editor.document is not None
@@ -306,7 +311,8 @@ class WorkflowPanel:
         label = self.panel.selected_label()
         if label and self.editor.ready:
             self.instance_name.setText(suggest_instance_name(self.editor.document,
-                self.window.current_record.frame_index, label.label_id, self.scheme.get('instance_prefixes', {})))
+                self.window.current_record.frame_index, label.label_id,
+                {**self.scheme.get('instance_prefixes', {}), **self.display.get('instance_prefixes', {})}))
 
     def rename(self):
         self.editor.rename_selected(self.instance_name.text())

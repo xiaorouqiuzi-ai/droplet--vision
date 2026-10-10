@@ -43,6 +43,21 @@ class AddAnnotationCommand(QUndoCommand):
         self.changed()
 
 
+class SetCineTemplateCommand(QUndoCommand):
+    def __init__(self, document, templates, changed=lambda: None):
+        super().__init__(tr('Set as Cine Support Rod Template'))
+        self.document, self.changed = document, changed
+        self.before, self.after = document.cine_templates, document._validate_templates(templates)
+
+    def redo(self):
+        self.document.replace_cine_templates(self.after)
+        self.changed()
+
+    def undo(self):
+        self.document.replace_cine_templates(self.before)
+        self.changed()
+
+
 class EditAnnotationCommand(AddAnnotationCommand):
     def __init__(self, document, old_id, derived, layer_id, changed=lambda: None):
         super().__init__(document, derived, layer_id, changed)

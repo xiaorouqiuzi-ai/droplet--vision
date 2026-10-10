@@ -60,7 +60,12 @@ re-enables it.
 Fixed buttons jump ±1/10/100/1000. Shortcuts: Left/Right, Shift+Left/Right,
 PgUp/PgDown, Ctrl+PgUp/PgDown. Home/End selects first/last frame. Click an upper
 annotation triangle to jump; hover for object/state details. Space toggles
-sequential playback. Target Review FPS is independent of jumps and scientific timing.
+review playback. **Review Speed (frames/s) / 检阅速度（帧/秒）** controls how many
+source frames advance per real second. At 1000, the view advances approximately
+5000 frames in five seconds, skipping intermediate images as needed. It does not
+require 1000 rendered images per second. Pause/resume uses the displayed frame as
+its new origin; manual navigation pauses playback. Review Speed is independent
+of +1000 jumps and scientific TIME64 timing.
 
 ## Display Modes
 
@@ -85,6 +90,17 @@ Point creates a record on click. Wand proposes editable raw-pixel polygon drafts
 and also requires Confirm. See the [editor tutorial](annotation_editor.md).
 
 ## Save and Reopen Annotations
+
+To reuse a droplet support rod, select **载滴杆 / Droplet support rod**, confirm
+one or more polygons, and check **Apply to entire Cine** (shown only for this
+label). One Cine-level template is projected across frames without duplicating
+records. Editing a projection creates a local override; deleting that override
+restores the template. Save the AnnotationDocument to retain templates/overrides.
+Unchecking disables projection without deleting history. The current annotation
+list provides an eye toggle (Session-only visibility) and right-click deletion
+(deactivation with Undo/Redo). Hidden records still count as annotated frames;
+pure template projections do not. Save ViewerSession separately for visibility.
+See [template details](annotation_editor.md#cine-level-droplet-support-rod-template).
 
 **Annotation → Save Annotations / Ctrl+Shift+S** saves under
 `outputs/annotations/<cine>.annotations.json` by default. **Current Annotation
@@ -118,7 +134,7 @@ Import it into the original document: Manual records stay intact. Follow the
 | No normal GUI window | Remove a leftover `QT_QPA_PLATFORM=offscreen` environment setting |
 | Drawing disabled | Wait for loading; choose an enabled compatible label and unlocked Manual/Reviewed layer |
 | Draft disappears on navigation | Close and Confirm before changing frame |
-| Timing warning | Investigate acquisition; playback FPS cannot repair timing |
+| Timing warning | Investigate acquisition; Review Speed cannot repair timing |
 | Missing package frame | Use available frames/targets; packages are intentionally sparse |
 | Dirty after Undo | History/audit changes still require saving |
 | Document mismatch | Locate the matching Cine/document; do not rename raw data to bypass checks |
