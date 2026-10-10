@@ -140,7 +140,9 @@ class ReviewPackage:
 
     def provenance(self):
         return {'review_origin': 'review_package', 'package_id': self.manifest['package_id'],
-                'reviewer': self.review.get('reviewer', {}).get('display_name', '')}
+                'reviewer': self.review.get('reviewer', {}).get('display_name', ''),
+                'package_kind': self.manifest.get('package_kind', 'review_package'),
+                'package_purpose': self.manifest.get('package_purpose', 'review')}
 
     def mark_in_review(self):
         self.manifest['package_status'] = 'in_review'
@@ -165,8 +167,8 @@ class ReviewPackage:
     def save(self, path, folder=False, mark_saved=True):
         """Verify a staged container before replacement; preserve old file on failure."""
         path = Path(path).resolve()
-        if not folder and path.suffix.lower() != '.dvrpkg':
-            raise ValueError('Use the .dvrpkg extension')
+        if not folder and path.suffix.lower() not in ('.dvapkg', '.dvrpkg'):
+            raise ValueError('Use the .dvapkg extension (.dvrpkg is also supported)')
         if folder and path.exists():
             raise FileExistsError('Folder export requires a new, empty destination name')
         payload = self.files()
@@ -257,8 +259,14 @@ class ReviewPackage:
             if name.endswith('.json'):
                 portable_json(json.loads(data))
         manifest = json.loads(files['manifest.json'])
-        if manifest.get('schema_version') != 1 or manifest.get('package_format_version') != 1:
-            raise ValueError('Unsupported review package version')
+        if manifest.get('schema_version') != 1 or manifest.get('package_format_version') not in (1, 2):
+            raise ValueError('Unsupported annotation package version')
+        if manifest['package_format_version'] == 2:
+            if (manifest.get('package_kind') != 'annotation_package'
+                    or manifest.get('package_purpose') not in ('annotation', 'review', 'general')):
+                raise ValueError('Invalid annotation package kind/purpose')
+        elif manifest.get('package_kind', 'review_package') != 'review_package':
+            raise ValueError('Invalid legacy package kind')
         if manifest.get('package_status') not in ('exported', 'in_review', 'reviewed'):
             raise ValueError('Invalid package status')
         scheme = validate_scheme(json.loads(files['scheme/annotation_scheme.json']))
@@ -288,6 +296,12 @@ class ReviewPackage:
             if doc.cine_templates != base.cine_templates:
                 raise ValueError('Review cannot change Cine templates')
             docs[cine], bases[cine] = doc, base
+            if type(meta.get('standalone_empty_base', False)) is not bool:
+                raise ValueError('Invalid standalone base flag')
+            if meta.get('standalone_empty_base', False) and (
+                    manifest['package_format_version'] != 2 or base.records.records()
+                    or base.frame_state_records or base.cine_templates):
+                raise ValueError('Standalone base must be empty')
             base_ids = {r.annotation_id for r in base.records.records()}
             if any(r.source != 'manual' or r.review_status == 'ground_truth'
                    for r in doc.records.records() if r.annotation_id not in base_ids):
@@ -328,6 +342,21 @@ class ReviewPackage:
             indices = {index for cid,index in seen if cid == cine}
             if not indices or any(r.frame_index not in indices for r in doc.records.records()) or any(r.frame_index not in indices for r in doc.frame_state_records):
                 raise ValueError('Annotation refers to an unbundled frame')
+        if 'sampling' in manifest:
+            from ..sampling.uniform import uniform_frame_indices
+            sampling = manifest['sampling']
+            if len(docs) != 1 or sampling.get('method') != 'uniform_frame_sampling':
+                raise ValueError('Invalid uniform sampling metadata')
+            doc = next(iter(docs.values()))
+            expected_indices = uniform_frame_indices(doc.frame_count, sampling['requested_samples'])
+            targets = sorted(r['frame_index'] for r in manifest['frames'] if r['review_target'])
+            if (sampling['frame_indices'] != expected_indices or targets != expected_indices
+                    or sampling['actual_target_count'] != len(expected_indices)
+                    or sampling.get('rounding') != 'nearest_ties_to_even'):
+                raise ValueError('Uniform target inventory mismatch')
+            roles = context_frames(expected_indices, doc.frame_count, sampling['context_radius'])
+            if {r['frame_index']: r['role'] for r in manifest['frames']} != roles:
+                raise ValueError('Uniform context inventory mismatch')
         if (not docs or sorted(manifest['source_cines'], key=lambda r:r['cine_id']) !=
                 sorted([d.to_dict()['cine'] for d in bases.values()], key=lambda r:r['cine_id'])):
             raise ValueError('Source Cine inventory mismatch')
@@ -366,14 +395,30 @@ class ReviewPackage:
                 'annotations':sum(len(d.active_annotation_ids) for d in self.documents.values()),
                 'frame_states':sum(len(d.active_frame_state_records) for d in self.documents.values())}
 
+    def progress(self, cine_id):
+        """Viewing alone never completes a target; explicit review also counts."""
+        doc = self.documents[cine_id]
+        targets = {r['frame_index'] for r in self.manifest['frames']
+                   if r['cine_id'] == cine_id and r['review_target']}
+        done = {r.frame_index for r in doc.active_records()
+                if r.source == 'manual' or r.review_status in ('accepted', 'edited', 'ground_truth')}
+        done.update(r.frame_index for r in doc.frame_state_records
+                    if r.record_id in doc.active_frame_state_records.values()
+                    and (r.source == 'manual' or r.review_status in ('accepted', 'edited', 'ground_truth')))
+        done.update(index for cine, index in self.review['reviewed_frames'] if cine == cine_id)
+        return len(targets), len(targets & done), len(targets - done)
 
-def export_package(sources, scheme, context=5, creator='', version='unknown'):
+
+def export_package(sources, scheme, context=5, creator='', version='unknown', purpose='review'):
     """Sources contain document, targets, get_frame(index), get_metadata(index), photometric.
 
     The caller owns each read-only source lifecycle. Only requested raw frames are read.
     """
     scheme = validate_scheme(scheme)
-    manifest = {'schema_version':1, 'package_format_version':1, 'package_id':str(uuid4()),
+    if purpose not in ('annotation', 'review', 'general'):
+        raise ValueError('Invalid package purpose')
+    manifest = {'schema_version':1, 'package_format_version':2, 'package_kind':'annotation_package',
+                'package_purpose':purpose, 'package_id':str(uuid4()),
                 'created_at':_now(), 'creator':creator, 'application_version':version,
                 'created_with_app_version':version, 'reviewed_with_app_version':None,
                 'annotation_scheme':{k:scheme[k] for k in ('scheme_id','version')},
@@ -397,6 +442,9 @@ def export_package(sources, scheme, context=5, creator='', version='unknown'):
             'snapshot_sha256':digest(encode(base.to_dict())), 'base_active_ids':sorted(base.active_annotation_ids),
             'base_active_state_ids':base.to_dict()['active_frame_state_records'],
             'snapshot_path':f'annotations/{logical}.review_annotations.json'}
+        if (source.get('standalone_empty_base') or
+                (not original.records.records() and not original.frame_state_records and not original.cine_templates)):
+            manifest['base_annotation_documents'][cine]['standalone_empty_base'] = True
         manifest['photometric'][cine] = source.get('photometric')
         for index, role in sorted(selection.items()):
             image = source['get_frame'](index)

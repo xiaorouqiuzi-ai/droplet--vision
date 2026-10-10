@@ -476,7 +476,9 @@ class AnnotationEditor(QObject):
             self.window.annotation_data_panel.status.setText(tr('Unsaved changes' if review.package.dirty
                                                                or self.workflow.notes_pending else 'Saved'))
             self.window.annotation_data_panel.copy_button.setToolTip(tr('Copy Path'))
-            self.window.setWindowTitle(tr('Droplet Annotation Workstation') + ' — [' + tr('Portable Review Mode') + ']'
+            purpose = review.package.manifest.get('package_purpose', 'review')
+            subtitle = tr({'annotation': 'New annotation task', 'review': 'Review task', 'general': 'General'}[purpose])
+            self.window.setWindowTitle(tr('Droplet Annotation Workstation') + ' — [' + tr('Annotation Package Mode') + ' · ' + subtitle + ']'
                                        + (' *' if review.package.dirty or self.workflow.notes_pending else ''))
 
     def select(self, annotation_id):

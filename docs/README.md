@@ -7,7 +7,7 @@ direction without an executable workflow.
 ## Documentation Map
 
 - **New user:** [Overview](../README.md) → [Getting Started](getting_started.md) → [Annotation Editor](annotation_editor.md).
-- **Reviewer:** [Overview](../README.md) → [Portable Review Package](portable_review_package.md).
+- **Reviewer:** [Overview](../README.md) → [Annotation Package](annotation_package.md).
 - **Developer:** [Annotation Architecture](annotation_architecture.md) → [Data Architecture](data_architecture_concept_v1.md).
 - **Research definition:** [Labeling Scheme](annotation_labeling_scheme_v1.md) → [Preprocessing Policy](image_preprocessing_policy.md) → [Timing Policy](timing_policy.md).
 
@@ -30,7 +30,7 @@ direction without an executable workflow.
 
 ## Collaboration
 
-[Portable Review Package](portable_review_package.md) covers annotator/reviewer
+[Annotation Package](annotation_package.md) covers annotator/reviewer
 roles, checksums, returned candidates and conflicts. This is an implemented
 offline workflow, not cloud sync or automatic Ground Truth approval.
 

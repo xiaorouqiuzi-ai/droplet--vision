@@ -31,7 +31,7 @@ from .i18n import tr, current_language
 class ExportReviewDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
-        self.setWindowTitle(tr('Export Portable Review Package...'))
+        self.setWindowTitle(tr('Create Annotation Package from Current Annotations...'))
         form = QFormLayout(self)
         self.selection = QComboBox()
         for key, title in [('current','Current frame'), ('human','All human-annotated frames'), ('queue','Queue status selection')]:
@@ -43,6 +43,10 @@ class ExportReviewDialog(QDialog):
         form.addRow(tr('Context frames before / after'), self.context)
         self.creator = QLineEdit()
         form.addRow(tr('Creator (optional alias)'), self.creator)
+        self.purpose = QComboBox()
+        for title, key in [('New annotation task','annotation'), ('Review task','review'), ('General','general')]:
+            self.purpose.addItem(tr(title), key)
+        form.addRow(tr('Purpose'), self.purpose)
         self.statuses = {}
         for status in ('DONE', 'NEEDS_REVIEW', 'PENDING', 'IN_PROGRESS', 'SKIPPED'):
             box = QCheckBox(status)
@@ -111,7 +115,7 @@ class ReviewController:
         if row is None:
             owner.window.timeline.set_frame(self.state.frame_index)
             owner.window.pause()
-            owner.window.statusBar().showMessage(tr('This frame is not included in the review package.'))
+            owner.window.statusBar().showMessage(tr('This frame is not included in the annotation package.'))
             return
         pixels = owner.provider.get_frame(owner.cine_id,index)
         self.state.request(index)
@@ -171,7 +175,7 @@ class ReviewCoordinator(QObject):
         self.task = None
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
-        self.panel = QGroupBox(tr('Portable Review Package'))
+        self.panel = QGroupBox(tr('Annotation Package'))
         layout = QVBoxLayout(self.panel)
         self.info = WrappedLabel()
         self.info.setProperty('literal_text',True)
@@ -191,13 +195,14 @@ class ReviewCoordinator(QObject):
             layout.addWidget(button)
         window.left_layout.insertWidget(0,self.panel)
         self.panel.hide()
-        file_menu = window.file_menu
-        file_menu.addSeparator()
-        self.export_action = window._action(file_menu,'Export Portable Review Package...',self.export_dialog)
-        window._action(file_menu,'Open Review Package...',self.open_dialog)
-        window._action(file_menu,'Open Review Package Folder...',lambda:self.open_dialog(folder=True))
-        self.save_action = window._action(file_menu,'Save Reviewed Package As...',self.save_dialog)
-        self.import_action = window._action(file_menu,'Import Review...',self.import_dialog)
+        functions = window.menuBar().addMenu(tr('Functions'))
+        window.functions_menu = functions
+        self.uniform_action = window._action(functions, 'Create Annotation Package from Uniform Cine Sampling...', self.uniform_dialog)
+        self.export_action = window._action(functions,'Create Annotation Package from Current Annotations...',self.export_dialog)
+        window._action(functions,'Open Annotation Package...',self.open_dialog)
+        window._action(functions,'Open Annotation Package Folder...',lambda:self.open_dialog(folder=True))
+        self.save_action = window._action(functions,'Save Annotation Package As...',self.save_dialog)
+        self.import_action = window._action(functions,'Import Returned Annotation Package...',self.import_dialog)
         self.refresh()
 
     @property
@@ -205,6 +210,7 @@ class ReviewCoordinator(QObject):
         return self.package is not None
 
     def refresh(self):
+        self.uniform_action.setEnabled(self.task is None)
         self.save_action.setEnabled(self.active)
         self.export_action.setEnabled(not self.active)
         self.import_action.setEnabled(not self.active)
@@ -215,13 +221,16 @@ class ReviewCoordinator(QObject):
             name=self.package.path.name if self.package.path else self.package.manifest['package_id'],
             cine=doc.cine_filename,total=doc.frame_count,available=len(self.provider.available(self.cine_id)),
             status=self.package.manifest['package_status']))
+        total, done, remaining = self.package.progress(self.cine_id)
+        self.info.setText(self.info.text() + '\n' + tr('Targets: {total} | Annotated / reviewed: {done} | Remaining: {remaining}').format(
+            total=total, done=done, remaining=remaining))
         self.window.timeline.slider.set_package_markers(self.provider.available(self.cine_id),self.provider.available(self.cine_id,True))
         self.window.display_panel.recalculate_button.setEnabled(False)
         self.window.editor.update_title()
 
     def open_dialog(self, checked=False, folder=False):
-        path = (QFileDialog.getExistingDirectory(self.window,tr('Open Review Package Folder...')) if folder else
-                QFileDialog.getOpenFileName(self.window,tr('Open Review Package...'),'outputs/review_packages','Review package (*.dvrpkg)')[0])
+        path = (QFileDialog.getExistingDirectory(self.window,tr('Open Annotation Package Folder...')) if folder else
+                QFileDialog.getOpenFileName(self.window,tr('Open Annotation Package...'),'outputs/annotation_packages','Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')[0])
         if not path:
             return
         try:
@@ -371,13 +380,15 @@ class ReviewCoordinator(QObject):
             revisions = {k:d._revision for k,d in self.package.documents.items()}
             if revisions != self.completed_revisions:
                 self.package.mark_in_review()
+        if self.active:
+            self.refresh()
 
     def save_dialog(self, checked=False):
         if not self.active:
             return False
         self.window.editor.workflow.flush_notes()
-        name = (self.package.path.stem if self.package.path else 'review') + '_reviewed.dvrpkg'
-        path, _ = QFileDialog.getSaveFileName(self.window,tr('Save Reviewed Package As...'),str(self.output_path(name)),'Review package (*.dvrpkg)')
+        name = (self.package.path.stem if self.package.path else 'review') + '_annotated.dvapkg'
+        path, _ = QFileDialog.getSaveFileName(self.window,tr('Save Annotation Package As...'),str(self.output_path(name)),'Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')
         if not path:
             return False
         try:
@@ -392,7 +403,7 @@ class ReviewCoordinator(QObject):
         self.window.editor.workflow.flush_notes()
         if not self.active or not self.package.dirty:
             return True
-        answer = QMessageBox.warning(self.window,tr('Unsaved review package'),tr('Save review changes before continuing?'),
+        answer = QMessageBox.warning(self.window,tr('Unsaved annotation package'),tr('Save annotation package changes before continuing?'),
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel)
         return self.save_dialog() if answer == QMessageBox.StandardButton.Save else answer == QMessageBox.StandardButton.Discard
@@ -400,7 +411,7 @@ class ReviewCoordinator(QObject):
     def autosave(self):
         if self.active and self.package.dirty:
             self.window.editor.workflow.flush_notes()
-            self.package.save(Path('outputs/review_packages/temp') / (self.package.manifest['package_id']+'.autosave.dvrpkg'),mark_saved=False)
+            self.package.save(Path('outputs/annotation_packages/temp') / (self.package.manifest['package_id']+'.autosave.dvapkg'),mark_saved=False)
 
     def export_requests(self, selection, statuses):
         w, editor = self.window,self.window.editor
@@ -440,9 +451,9 @@ class ReviewCoordinator(QObject):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         folder = dialog.folder.isChecked()
-        destination, _ = QFileDialog.getSaveFileName(self.window,tr('Export Portable Review Package...'),
-            str(self.output_path('review_package' + ('' if folder else '.dvrpkg'))),
-            'Folder name (*)' if folder else 'Review package (*.dvrpkg)')
+        destination, _ = QFileDialog.getSaveFileName(self.window,tr('Create Annotation Package from Current Annotations...'),
+            str(self.output_path('annotation_package' + ('' if folder else '.dvapkg'))),
+            'Folder name (*)' if folder else 'Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')
         if not destination:
             return
         try:
@@ -453,13 +464,13 @@ class ReviewCoordinator(QObject):
                     raise ValueError('Selected documents use different scheme snapshots; export them separately')
                 if Path(request['path']).resolve().parent in Path(destination).resolve().parents:
                     raise ValueError('Do not export into the source Cine directory')
-            context, creator = dialog.context.value(), dialog.creator.text()
+            context, creator, purpose = dialog.context.value(), dialog.creator.text(), dialog.purpose.currentData()
             version = project_metadata()[0]
             def work():
-                result = export_cines(requests,scheme,context,creator,version)
+                result = export_cines(requests,scheme,context,creator,version,purpose)
                 result.save(destination,folder=folder)
                 return result
-            self.progress = QProgressDialog(tr('Exporting raw review frames...'),'',0,0,self.window)
+            self.progress = QProgressDialog(tr('Exporting raw annotation frames...'),'',0,0,self.window)
             self.progress.setCancelButton(None)
             self.progress.show()
             self.task = _Task(0,'review_export',work)
@@ -468,26 +479,61 @@ class ReviewCoordinator(QObject):
         except Exception as error:
             self.window._error(str(error))
 
+    def uniform_dialog(self):
+        if self.task is not None:
+            return
+        from .uniform_package import UniformPackageDialog
+        from ..review_package.cine_export import export_uniform_cine
+        dialog = UniformPackageDialog(self.window, self.window.cine_path)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        name = Path(dialog.path.text()).stem + f'_uniform_{dialog.samples.value()}.dvapkg'
+        destination, _ = QFileDialog.getSaveFileName(self.window,
+            tr('Create Annotation Package from Uniform Cine Sampling...'), str(self.output_path(name)),
+            'Droplet Vision Annotation Package (*.dvapkg)')
+        if not destination:
+            return
+        scheme = deepcopy(self.window.editor.workflow.scheme)
+        self.window.editor.workflow.flush_notes()
+        document = None
+        if (not self.active and self.window.cine_path is not None
+                and Path(dialog.path.text()).resolve() == self.window.cine_path.resolve()
+                and self.window.editor.document is not None):
+            document = AnnotationDocument.from_dict(self.window.editor.document.to_dict())
+        # Snapshot UI values before dispatch; worker never reads Qt widgets.
+        path, count, expected = dialog.path.text(), dialog.samples.value(), deepcopy(dialog.info)
+        options = dict(context=dialog.context.value(), purpose=dialog.purpose.currentData(),
+                       creator=dialog.creator.text(), version=project_metadata()[0],
+                       allow_short=dialog.allow_short, expected=expected, document=document)
+        self.progress = QProgressDialog(tr('Exporting raw annotation frames...'), '', 0, 0, self.window)
+        self.progress.setCancelButton(None)
+        self.progress.show()
+        self.task = _Task(0, 'uniform_export', lambda: export_uniform_cine(path, destination, count, scheme, **options))
+        self.task.signals.done.connect(self._export_done)
+        self.pool.start(self.task)
+        self.refresh()
+
     @staticmethod
     def output_path(name):
-        directory = Path('outputs/review_packages/exported').resolve()
+        directory = Path('outputs/annotation_packages/exported').resolve()
         directory.mkdir(parents=True, exist_ok=True)
         return directory / name
 
     def _export_done(self, token, kind, result, error):
         self.progress.close()
         self.task = None
+        self.refresh()
         if error:
             self.window._error(error)
         else:
             size = sum(p.stat().st_size for p in result.path.rglob('*') if p.is_file()) if result.path.is_dir() else result.path.stat().st_size
-            QMessageBox.information(self.window,tr('Portable Review Package'),json.dumps({**result.summary(),'bytes':size},indent=2))
+            QMessageBox.information(self.window,tr('Annotation Package'),json.dumps({**result.summary(),'bytes':size},indent=2))
 
     def import_dialog(self):
         editor = self.window.editor
         if self.active or editor.document is None:
             return
-        path, _ = QFileDialog.getOpenFileName(self.window,tr('Import Review...'),'outputs/review_packages','Review package (*.dvrpkg)')
+        path, _ = QFileDialog.getOpenFileName(self.window,tr('Import Returned Annotation Package...'),'outputs/annotation_packages','Droplet Vision Annotation Package (*.dvapkg *.dvrpkg)')
         if not path:
             return
         try:

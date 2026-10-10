@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
 
     def reorder_menus(self):
         actions = {a.text(): a for a in self.menuBar().actions()}
-        for title in ('File', 'Annotation', 'Queue', 'View', 'Model', 'Settings', 'Help'):
+        for title in ('File', 'Annotation', 'Queue', 'View', 'Model', 'Settings', 'Functions', 'Help'):
             action = actions[tr(title)]
             self.menuBar().removeAction(action)
             self.menuBar().addAction(action)
@@ -601,7 +601,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         if hasattr(self, 'review_manager') and self.review_manager.task is not None:
-            self.statusBar().showMessage(tr('Wait for review package export to finish.'))
+            self.statusBar().showMessage(tr('Wait for annotation package export to finish.'))
             event.ignore()
             return
         if not self.editor.confirm_discard():

@@ -73,9 +73,13 @@ class MarkedSlider(QSlider):
         return columns
 
     def marker_at(self, pos):
-        if not 0 <= pos.y() <= 10:
+        if self.height()-10 <= pos.y() <= self.height() and self.available_frames:
+            columns = self.marker_columns(self.available_frames)
+        elif 0 <= pos.y() <= 10:
+            columns = self.marker_columns()
+        else:
             return None
-        candidates = [(abs(x-pos.x()), x, frames) for x,frames in self.marker_columns().items()
+        candidates = [(abs(x-pos.x()), x, frames) for x,frames in columns.items()
                       if abs(x-pos.x()) <= self.HIT_RADIUS]
         if not candidates:
             return None
@@ -89,8 +93,10 @@ class MarkedSlider(QSlider):
         frame, frames = hit
         lines = [tr('Frame: {frame}').format(frame=frame)]
         if len(frames) > 1:
-            lines.insert(0,tr('Multiple annotated frames ({count}); nearest to current frame').format(count=len(frames)))
-        if self.marker_details is not None:
+            title = ('Multiple available frames ({count}); nearest to current frame' if pos.y() >= self.height()-10
+                     else 'Multiple annotated frames ({count}); nearest to current frame')
+            lines.insert(0,tr(title).format(count=len(frames)))
+        if self.marker_details is not None and pos.y() <= 10:
             lines.extend(self.marker_details(frame))
         return '\n'.join(lines)
 

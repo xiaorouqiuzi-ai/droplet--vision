@@ -46,7 +46,7 @@ class ReviewUITests(unittest.TestCase):
         for language in ('en_US','zh_CN','en_US'):
             self.window.change_language(language)
             self.assertEqual([a.text() for a in self.window.menuBar().actions()],
-                [i18n.tr(k) for k in ('File','Annotation','Queue','View','Model','Settings','Help')])
+                [i18n.tr(k) for k in ('File','Annotation','Queue','View','Model','Settings','Functions','Help')])
         dialog = ExportReviewDialog(self.window)
         self.assertEqual(dialog.context.value(),5)
         self.assertEqual(dialog.context.maximum(),100)
@@ -55,7 +55,7 @@ class ReviewUITests(unittest.TestCase):
     def test_sparse_navigation_title_timing_and_snapshot(self):
         _,record,_,pixels,package = self.open_fixture()
         w = self.window;w.change_language('en_US')
-        self.assertIn('Portable Review Mode',w.windowTitle())
+        self.assertIn('Annotation Package Mode',w.windowTitle())
         self.assertEqual(w.current_record.frame_index,10)
         self.assertEqual(w.current_record.timestamp_time64,1234567890123456799)
         np.testing.assert_array_equal(w.raw_image,pixels)

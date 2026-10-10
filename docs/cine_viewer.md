@@ -26,7 +26,7 @@ integers. Unknown metadata is shown as unknown, not invented.
 
 The center is the image canvas. The right workspace holds annotation operations;
 Queue and bookmarks remain separate docks. Menus are File, Annotation, Queue,
-View, Model, Settings, Help. Language switches live; About shows software version,
+View, Model, Settings, Functions, Help. Language switches live; About shows software version,
 repository/author information and the project icon.
 
 ## TIME64
@@ -155,13 +155,18 @@ Unsaved session notes/bookmarks do not have AnnotationDocument dirty protection;
 save them explicitly. [Annotation saving](annotation_editor.md#saving-history-and-recovery)
 is separate.
 
-## Portable Review Mode
+## Annotation Package Mode
 
-File → Open Review Package… opens PNG-backed frames, with a visible mode title and
+Functions → Open Annotation Package… opens PNG-backed frames, with a visible mode title and
 available-frame count. Sparse target/context markers are distinct from human-work
 markers. Missing frames produce a message, not a black/forged frame. Single-step
 playback follows available frames, so it must not be interpreted as a complete
-experimental sequence. Use [review instructions](portable_review_package.md).
+experimental sequence. Use [annotation package instructions](annotation_package.md).
+
+Uniform sampling creates a single-Cine package with exactly N unique targets when F ≥ N,
+including both endpoints. Empty annotation snapshots are supported. The left panel
+shows target, annotated/reviewed and remaining counts. Opening a frame alone does
+not count as completion. Legacy `.dvrpkg` remains readable; new exports use `.dvapkg`.
 
 ## Implementation and Limits
 

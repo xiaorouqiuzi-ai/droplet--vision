@@ -35,7 +35,7 @@ phase identity or experimental timing validity.
 | Implemented | Polygon drafts, vertex/midpoint editing, Point, raw-grayscale Magic Wand and Undo/Redo |
 | Implemented | Scheme-driven objects/colors, daughter numbering, bilingual live UI and clickable annotation markers |
 | Implemented | Multi-label Frame State, separate quality/notes, immutable history and atomic AnnotationDocument saving |
-| Implemented | Deterministic sampling, resumable Annotation Queue and offline `.dvrpkg` review/merge |
+| Implemented | Deterministic sampling, resumable Annotation Queue and uniform Cine sampling and `.dvapkg` annotation/review packages |
 | Experimental scope | Magic Wand proposals and the human-reviewed Ref90 preprocessing candidate require visual judgment |
 | Planned | Dataset export, production Prediction Store/import, YOLO-seg/U-Net integration, tracking, measurement and temporal event inference |
 
@@ -46,7 +46,8 @@ on every Phantom encoding. See [limitations](#known-limitations).
 
 ![Droplet Annotation Workstation in Portable Review Mode](Example/236.png)
 
-Example workspace in Portable Review Mode, with object overlays, annotation
+Example workspace from the earlier Portable Review Mode (now Annotation Package
+Mode), with object overlays, annotation
 controls, Frame State options and the About dialog. The screenshot is an
 interface example, not a validated physical interpretation of the image.
 
@@ -58,7 +59,7 @@ interface example, not a validated physical interpretation of the image.
 | Bottom | Human-annotation markers, timeline, fixed frame jumps and independent Review Speed (frames/s) |
 
 Queue and bookmarks have separate docks. Menus: **File → Annotation → Queue →
-View → Model → Settings → Help**. 中文 is the default; the language button or
+View → Model → Settings → Functions → Help**. 中文 is the default; the language button or
 Settings changes visible text immediately without discarding editing state.
 
 ## Quick Start
@@ -205,23 +206,26 @@ open a pending item, annotate/save, then explicitly mark Done, Skipped or Needs
 Review. Same-Cine items reuse the reader. Reopen the saved queue to resume.
 See [sampling and queue workflow](docs/frame_sampling_queue.md).
 
-## Offline Collaboration without Sharing Multi-Terabyte Cine Data
+## Annotation Packages
 
-A **Portable Review Package** (`.dvrpkg`) contains selected raw PNG frames,
-optional context, annotations, Frame States, TIME64, a Scheme snapshot and checksums.
-It contains **no complete Cine** and needs no original dataset path on the reviewer's machine.
+An **Annotation Package** (`.dvapkg`) transports raw PNG frames, TIME64, a Scheme
+snapshot, optional annotations/Frame States and checksums. It can distribute
+unannotated tasks, partially annotated work or review assignments without the original Cine.
+Older `.dvrpkg` files remain supported.
 
 ```text
-Annotator → Export .dvrpkg → Reviewer: Edit / Accept / Reject
-          ← returned .dvrpkg ← Save Reviewed Package
-          → Import: Reviewed candidates → original user evaluates acceptance
+Huge Cine → Uniformly sample 50 frames → Annotation Package
+          → Collaborator annotates locally → Returned package → Reviewed candidates
 ```
 
-Context defaults to ±5 frames. Available frames and targets are explicit. Edits
-create derived records; import preserves Manual and detects concurrent edits.
-Nothing automatically becomes Ground Truth or marks a queue item Done. State
-candidates import into immutable history; a dedicated comparison/adoption UI is
-planned. Follow the [annotator/reviewer instructions](docs/portable_review_package.md).
+Use **Functions → Create Annotation Package from Uniform Cine Sampling…**. With
+at least 50 source frames, N=50 means exactly 50 targets including both endpoints;
+context defaults to 0. Package size depends on content; no fixed size is promised.
+Open, Save As and Import Returned Annotation Package are also in Functions.
+Existing-annotation export retains its optional ±5 context default. Checksums,
+provenance and base/local/returned conflicts remain enforced. Nothing automatically
+becomes Ground Truth; returned Frame States remain history candidates pending evaluation.
+See [Annotation Package workflow](docs/annotation_package.md).
 
 ## Data Architecture
 
@@ -292,7 +296,7 @@ Start with the [Documentation Index](docs/README.md).
 | [Annotation Editor](docs/annotation_editor.md) | Drawing, editing, State, quality and saving |
 | [Labeling Scheme v1](docs/annotation_labeling_scheme_v1.md) | Authoritative scientific label definitions |
 | [Frame Sampling Queue](docs/frame_sampling_queue.md) | Reproducible selection and resumable work |
-| [Portable Review Package](docs/portable_review_package.md) | Offline collaboration and conflicts |
+| [Annotation Package](docs/annotation_package.md) | Offline collaboration and conflicts |
 | [Data Architecture](docs/data_architecture_concept_v1.md) | Ground Truth / Prediction / Measurement |
 | [Annotation Architecture](docs/annotation_architecture.md) | Developer history and persistence contracts |
 | [Image Preprocessing Policy](docs/image_preprocessing_policy.md) | Display/model/science separation |

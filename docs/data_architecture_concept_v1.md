@@ -26,7 +26,7 @@ Droplet Vision Data Architecture Concept v1.0
 
 Human AnnotationDocument 是人工标注的主文档，也保存未审核记录和历史；并非其中每条记录都已经通过 Ground Truth 确认。审核状态与 active view 仍须明确区分。
 
-[Portable Review Package](portable_review_package.md) 是 raw frame 子集与人工标注快照的运输/协作格式，不是第四个 canonical 科研数据层。返回结果合并为 Reviewed 候选；原 Manual 历史、Prediction 与 Measurement 边界保持不变。
+[Annotation Package](annotation_package.md) 是 raw frame 子集与可选人工标注快照的运输/协作格式（允许空标注任务），不是第四个 canonical 科研数据层。返回结果合并为 Reviewed 候选；原 Manual 历史、Prediction 与 Measurement 边界保持不变。
 
 ```text
 Raw Cine
@@ -427,7 +427,7 @@ Active Learning 可从 Initial GT 训练 Model v1，在更多 Cine 上运行，�
 | Current foundation | Annotation Queue、可复现采样与进度管理 | [Sampling / Queue](frame_sampling_queue.md)；不自动判定物理事件 |
 | Current foundation | Viewer layers、派生人工/Reviewed record 的基础能力 | 原 prediction 不被覆盖；不代表完成实际模型导入和完整审核流程 |
 | Implemented | Frame State 历史与 active pointers、独立 Quality/Notes、Scheme snapshot、可选 instance name 操作 | [Editor](annotation_editor.md)；旧 v1 文件兼容加载 |
-| Implemented v1 | Portable Review Package：稀疏 raw PNG、离线审核、返回候选导入与对象冲突处理 | [Review workflow](portable_review_package.md)；不自动覆盖原人工数据或升级 Ground Truth；返回 Frame State 保留为历史候选 |
+| Implemented v2 | Annotation Package：均匀抽帧、空标注任务、稀疏 raw PNG、离线标注/审核、返回候选导入与对象冲突处理 | [Annotation Package workflow](annotation_package.md)；不自动覆盖原人工数据或升级 Ground Truth；返回 Frame State 保留为历史候选 |
 | Future / planned | Prediction Import / Store、实际模型输出接入与模型审核流程 | 图层和人工离线审核基础不等于模型系统已完成 |
 | Future / planned | Dataset Export、YOLO-seg baseline、完整 inference integration、Active Learning | 原文后续方向，不由本次文档任务实现 |
 | Future / planned | Measurement Store、analysis provenance 执行链与时序事件推断 | 本文规范派生数据边界，不声明已提供测量功能 |

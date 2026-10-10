@@ -45,7 +45,11 @@ def merge_review(local, package, resolutions=None):
     if cine not in package.bases:
         raise ValueError('Review package does not contain this Cine')
     base, remote = package.bases[cine], package.documents[cine]
-    if (local.document_id != base.document_id or local.to_dict()['cine'] != base.to_dict()['cine']):
+    standalone = (package.manifest.get('package_format_version') == 2
+                  and package.manifest['base_annotation_documents'][cine].get('standalone_empty_base') is True
+                  and not base.records.records() and not base.frame_state_records and not base.cine_templates)
+    if ((local.document_id != base.document_id and not standalone)
+            or local.to_dict()['cine'] != base.to_dict()['cine']):
         raise ValueError('Review base document/Cine identity does not match the local document')
     result = AnnotationDocument.from_dict(local.to_dict())
     conflicts, imported = [], []

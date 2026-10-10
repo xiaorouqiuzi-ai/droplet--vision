@@ -1,7 +1,7 @@
 # Getting Started
 
 Use the Windows source checkout. No Cine needs to be copied into the repository;
-a reviewer can start with only a `.dvrpkg`.
+a reviewer can start with only a `.dvapkg` (or legacy `.dvrpkg`).
 
 ## Requirements and Installation
 
@@ -49,7 +49,7 @@ in the shortcut, never versioned configuration. Use the console launcher for err
 Choose **File / 文件 → Open Cine / 打开 Cine**. Wait for asynchronous loading
 before drawing. The left panel shows full TIME64 and relative time. A failed
 Ref90 reference falls back to Raw with a message. Cine remains read-only.
-For a package, use **File → Open Review Package…** instead.
+For a package, use **Functions → Open Annotation Package…** instead.
 
 ## Auto Fit and Navigation
 
@@ -124,12 +124,23 @@ Queue → Open Queue…, Set Dataset Root…, then Open Selected Item or Next Pe
 Save annotations before Mark Done. Reopen the same queue and set its root to
 resume. Queue status is work progress, not scientific approval.
 
-## Review Package Basics
+## Annotation Package Basics
 
-Save the original annotation document, then export selected frames and context.
-A reviewer opens the `.dvrpkg`, edits and saves a new `_reviewed.dvrpkg`.
-Import it into the original document: Manual records stay intact. Follow the
-[two-person workflow](portable_review_package.md) before sending data.
+Menus: **File → Annotation → Queue → View → Model → Settings → Functions → Help**.
+Functions groups independent package utilities; File keeps Cine and Session operations,
+and Annotation keeps canonical AnnotationDocument operations.
+
+For a new task, choose **Functions → Create Annotation Package from Uniform Cine
+Sampling…**, select one Cine and N=50. No existing annotations or Queue is required.
+For a 32196-frame Cine this produces 50 targets, from 0 to 32195, with context 0 by default.
+If the Cine has fewer than N frames, confirm exporting all unique frames or cancel.
+
+A collaborator uses **Functions → Open Annotation Package…** without the original Cine,
+annotates objects/states, and chooses **Save Annotation Package As…** to return a new
+`_annotated.dvapkg`. Back at the project, open the matching Cine/document and choose
+**Import Returned Annotation Package…**. Empty-base tasks accept new candidates;
+existing-annotation reviews retain base/local/reviewer conflict checks. Nothing silently
+becomes Ground Truth. Follow the [full workflow](annotation_package.md).
 
 ## Troubleshooting
 
