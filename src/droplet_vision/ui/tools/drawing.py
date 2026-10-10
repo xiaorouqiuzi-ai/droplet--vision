@@ -121,6 +121,8 @@ class SelectTool(EditorTool):
         self.midpoint_press = None
 
     def mouse_press(self, position):
+        if self.editor.support_move.press(position):
+            return
         handle = self.editor.handle_at(position)
         midpoint = self.editor.midpoint_at(position) if handle is None else None
         record = self.editor.selected_record()
@@ -153,6 +155,9 @@ class SelectTool(EditorTool):
             self.working = deepcopy(record.geometry)
 
     def mouse_move(self, position):
+        if self.editor.support_move.drag is not None:
+            self.editor.support_move.move(position)
+            return
         if self.original is None:
             self.editor.hover_midpoint(position)
             return
@@ -175,6 +180,9 @@ class SelectTool(EditorTool):
                                 abs(xx-opposite[0]), abs(yy-opposite[1])]
 
     def mouse_release(self, position):
+        if self.editor.support_move.drag is not None:
+            self.editor.support_move.release(position)
+            return
         if self.original is not None:
             if self.midpoint_press is None or list(position) != self.midpoint_press:
                 self.mouse_move(position)
@@ -193,6 +201,7 @@ class SelectTool(EditorTool):
         self.editor.insert_vertex(position)
 
     def cancel(self):
+        self.editor.support_move.cancel()
         self.handle = self.original = self.working = None
         self.midpoint_press = None
         super().cancel()

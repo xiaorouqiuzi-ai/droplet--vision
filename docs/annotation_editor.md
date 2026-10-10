@@ -217,7 +217,7 @@ annotation convenience, not a scientific assertion of perfect immobility.
    other object labels. Without a template or confirmed polygons the checkbox
    is disabled.
 3. Navigate anywhere in this Cine: the Viewer projects the same immutable raw
-   geometry. It creates **no per-frame records**. The source annotations remain
+   geometry (plus any manually saved frame offset). It creates **no per-frame records**. The source annotations remain
    ordinary active records, without duplicate overlays on their source frame.
 4. Uncheck to turn projection off. Template references, source records and any
    local overrides remain intact. **Update Cine Support Rod Template** is the
@@ -254,6 +254,66 @@ Missing `cine_templates` means no template. Missing `apply_entire_cine` means
 projection is off. References point to retained immutable records; an edited
 or deactivated source does not silently replace the stored template geometry.
 
+### Sparse support-rod alignment
+
+Use the clearest frame (often the last frame) to confirm one or more rods and
+**Apply to entire Cine**. On another frame select the rod label/annotation and
+activate **Select**. One four-way **✥** move handle appears at the combined
+bounding-box center of the entire template set, distinct from square vertex
+and midpoint handles. Its screen-space arrow spans about 16 px, with a 20 px
+hit area; zoom/pan do not change the raw-coordinate offset.
+
+Drag the handle to translate all rods together. Mouse movement only previews;
+release commits **one Undo command**. Shape, vertex order and relative positions
+are preserved. The whole shared delta is clamped at image bounds rather than
+clipping individual vertices. Esc or frame/tool changes cancel an unfinished
+drag. The handle is shown only in Select mode for a selected rod label/record,
+with the entire group visible and editable; hiding/locking part of the group
+suppresses it, so hidden rods are not moved unexpectedly.
+
+Tool Settings shows the absolute **Frame offset** relative to the template.
+**Reset frame position** (also on the handle context menu) removes that frame's
+sparse offset; Undo restores it. Missing offsets mean `(0, 0)`. Returning to zero
+does not leave an explicit zero entry. The source frame may also have a local
+offset, with a warning that the template itself remains unchanged.
+
+```json
+{
+  "frame_overrides": {
+    "15460": {"translation": {"dx": -2.4, "dy": 1.7}}
+  }
+}
+```
+
+This optional node lives inside `cine_templates.support_structure`. Only edited
+frames are stored; old documents without it load normally. Values must be finite
+raw-pixel deltas and the projected group must stay within image bounds. No raw
+pixels, scientific timing, interpolation, tracking or physical-motion measurement
+are calculated or changed. Save/reload preserves these exact offsets.
+
+Rendering precedence is **full frame-local geometry > frame translation > global
+template**, while unrelated ordinary annotations remain independent. Editing a
+vertex/midpoint of a translated projection materializes the **entire currently
+projected group** into frame-local full geometry, incorporates the offset once,
+and clears the sparse translation in the same Undo action. Subsequent whole-group
+moves derive new local records without updating the template. Full geometry is
+shown as **Frame override**; Reset is disabled in that mode because an arbitrary
+shape edit has no single reversible offset. Use Undo or delete the local overrides.
+Deleting each materialized override falls back to its original zero-offset global
+polygon; undoing materialization restores the sparse translation instead.
+
+Existing legacy partial full overrides take precedence for their corresponding
+rod. A group move with any full overrides materializes/derives the whole displayed
+group, preserving its relative layout. Explicit template replacement starts a new
+reference set without carrying offsets from the previous template. Updating from
+a translated projection requires first confirming it as full local geometry;
+hidden source records are never inadvertently added to that new set.
+
+A saved translation is human work: its frame gets a timeline marker and participates
+in annotated-frame navigation, even with the eye off. Pure global projection still
+does not mark every frame. Projected list rows include their offset; full overrides
+remain distinctly labelled.
+
 ### Current annotation list actions
 
 The list separates **Frame annotations** from **Cine templates**. Projected rows
@@ -276,7 +336,7 @@ Deleting a local override restores its global projection when enabled.
 
 Hidden real annotations still count for human timeline markers. Global template
 projections do **not** add markers to every frame: only real source/override/
-other human annotations and manual Frame States contribute. Counts also keep
+other human annotations, manual translation corrections and Frame States contribute. Counts also keep
 frame records separate from transient projections.
 
 ### Portable review
@@ -285,11 +345,15 @@ Export materializes geometry only for the package's selected target/context
 frames, without mutating the canonical document or forcing in the source frame.
 These package-only records use the existing `source = imported` schema value
 and `attributes.creation_tool = cine_template_projection`. They carry source
-record/frame provenance and deterministic IDs; no new scientific source enum
+record/frame provenance, `frame_translation` dx/dy for translated snapshots,
+and deterministic IDs; no new scientific source enum
 is introduced. Materialized projections are not human-work timeline markers.
 
 Reviewer edits become manual reviewed frame-local override candidates on import.
 The original Cine template is never updated by review. Concurrent local overrides
-or a changed/disabled template require explicit conflict resolution. Template
+a changed local offset, or a changed/disabled template require explicit conflict
+resolution. Exported geometry already incorporates the frame translation exactly
+once. A reviewer can move the materialized group using the same handle; its changes
+return as Reviewed full-geometry local candidates, never as template updates. Template
 management is disabled in review mode. Raw pixels, TIME64 and Ref90 remain
 unchanged throughout this workflow.

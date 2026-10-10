@@ -11,6 +11,7 @@ from .geometry import validate_geometry
 from .schema import AnnotationRecord, _json_copy, _now
 from .store import AnnotationStore
 from .frame_state import FrameStateRecord
+from .support_translation import translation, translated
 
 
 class AnnotationDocument:
@@ -105,7 +106,8 @@ class AnnotationDocument:
                 and (frame_index is None or r.frame_index == frame_index)]
 
     def annotated_frames(self):
-        return sorted({r.frame_index for r in self.active_records()} | set(self._active_frame_states))
+        return sorted({r.frame_index for r in self.active_records()} | set(self._active_frame_states)
+                      | {int(key) for key in self._cine_templates.get('support_structure', {}).get('frame_overrides', {})})
 
     @property
     def cine_templates(self):
@@ -132,6 +134,17 @@ class AnnotationDocument:
                 if (record.frame_index != frame or record.label_id != 'support_structure'
                         or record.geometry_type != 'polygon' or record.source != 'manual'):
                     raise ValueError('Template requires confirmed manual support rod polygons')
+            overrides = template.get('frame_overrides', {})
+            if not isinstance(overrides, dict):
+                raise ValueError('Invalid support frame overrides')
+            for key, override in overrides.items():
+                if (not isinstance(key, str) or not key.isascii() or not key.isdigit()
+                        or str(int(key)) != key or not 0 <= int(key) < self.frame_count
+                        or not isinstance(override, dict) or set(override) != {'translation'}):
+                    raise ValueError('Invalid support override frame')
+                offset = translation(override['translation'])
+                for source_id in ids:
+                    validate_geometry('polygon', translated(self.records.get(source_id).geometry, offset), self.width, self.height)
         return value
 
     def replace_cine_templates(self, value):
@@ -153,7 +166,63 @@ class AnnotationDocument:
                 and r.attributes.get('creation_tool') in (
                     'cine_support_template', 'cine_support_template_override', 'cine_template_projection')]
 
-    def support_projection(self, source_id, frame_index, package=False):
+    def support_translation(self, frame_index):
+        return _json_copy(self._cine_templates.get('support_structure', {}).get('frame_overrides', {}).get(
+            str(frame_index), {}).get('translation', {'dx': 0.0, 'dy': 0.0}))
+
+    def with_support_translation(self, frame_index, offset):
+        if type(frame_index) is not int or not 0 <= frame_index < self.frame_count:
+            raise ValueError('Invalid translation frame')
+        offset = translation(offset)
+        value = self.cine_templates
+        if 'support_structure' not in value:
+            raise ValueError('No Cine support template')
+        template = value['support_structure']
+        overrides = template.setdefault('frame_overrides', {})
+        if offset['dx'] or offset['dy']:
+            overrides[str(frame_index)] = {'translation': offset}
+        else:
+            overrides.pop(str(frame_index), None)
+        if not overrides:
+            template.pop('frame_overrides', None)
+        return self._validate_templates(value)
+
+    def support_source_id(self, record):
+        ids = self._cine_templates.get('support_structure', {}).get('annotation_ids', [])
+        if record.label_id != 'support_structure' or record.geometry_type != 'polygon':
+            return None
+        source_id = record.attributes.get('template_source_annotation_id')
+        if source_id in ids:
+            return source_id
+        key = record.annotation_id
+        while key in self.record_layers:
+            if key in ids:
+                return key
+            key = self.records.get(key).derived_from
+        return None
+
+    def support_full_overrides(self, frame_index):
+        ids = self._cine_templates.get('support_structure', {}).get('annotation_ids', [])
+        return [r for r in self.active_records(frame_index)
+                if r.annotation_id not in ids and self.support_source_id(r) is not None]
+
+    def support_suppressed_ids(self, frame_index):
+        template = self._cine_templates.get('support_structure', {})
+        if not template.get('apply_entire_cine', False):
+            return set()
+        offset = self.support_translation(frame_index)
+        if offset['dx'] or offset['dy']:
+            return set(template['annotation_ids'])
+        return {self.support_source_id(r) for r in self.support_full_overrides(frame_index)}
+
+    def support_group(self, frame_index):
+        if not self._cine_templates.get('support_structure', {}).get('apply_entire_cine', False):
+            return []
+        suppressed = self.support_suppressed_ids(frame_index)
+        return [r for r in self.active_records(frame_index)
+                if r.annotation_id not in suppressed and self.support_source_id(r) is not None] + self.support_projections(frame_index)
+
+    def support_projection(self, source_id, frame_index, package=False, offset=None):
         """Independent transient view, never inserted into this document's store.
 
         Package snapshots use deterministic, frame-specific IDs; viewer IDs are
@@ -161,17 +230,22 @@ class AnnotationDocument:
         """
         from uuid import uuid5, NAMESPACE_URL
         source = self.records.get(source_id)
+        offset = translation(offset if offset is not None else self.support_translation(frame_index))
+        moved = bool(offset['dx'] or offset['dy'])
+        suffix = f":{offset['dx']}:{offset['dy']}" if moved else ''
         if source.label_id != 'support_structure' or source.geometry_type != 'polygon' or source.source != 'manual':
             raise ValueError('Invalid support projection source')
         row = AnnotationRecord(self.cine_id, frame_index, 'support_structure', 'polygon',
-                               _json_copy(source.geometry), source='imported' if package else 'manual',
-                               annotation_id=(str(uuid5(NAMESPACE_URL, f'{self.document_id}:{source_id}:{frame_index}:support-projection'))
+                               translated(source.geometry, offset), source='imported' if package else 'manual',
+                               annotation_id=(str(uuid5(NAMESPACE_URL, f'{self.document_id}:{source_id}:{frame_index}:support-projection{suffix}'))
                                               if package else 'cine-template:' + source_id),
                                created_at=source.created_at, updated_at=source.updated_at,
                                attributes={'creation_tool': 'cine_template_projection',
                                            'template_source_annotation_id': source_id,
                                            'template_source_frame_index': source.frame_index,
                                            'instance_name': source.attributes.get('instance_name', '')})
+        if moved:
+            row.attributes['frame_translation'] = offset
         self.validate_record(row)
         return row
 
@@ -180,9 +254,11 @@ class AnnotationDocument:
         if not template.get('apply_entire_cine', False):
             return []
         active = self.active_records(frame_index)
-        replaced = {r.attributes.get('template_source_annotation_id') for r in self.support_copies(frame_index)}
+        replaced = {self.support_source_id(r) for r in self.support_full_overrides(frame_index)}
         # A same-frame derived edit of a source also takes precedence.
         for record in active:
+            if record.annotation_id in self.support_suppressed_ids(frame_index):
+                continue
             key = record.annotation_id
             while key:
                 replaced.add(key)

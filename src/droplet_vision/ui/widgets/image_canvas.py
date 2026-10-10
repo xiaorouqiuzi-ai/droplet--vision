@@ -137,6 +137,12 @@ class ImageCanvas(QGraphicsView):
             return
         point = self.mapToScene(event.pos())
         position = (point.x(), point.y())
+        if self.tool.editor.support_move.hit(position):
+            menu = QMenu(self)
+            action = menu.addAction(tr('Reset frame position'), self.tool.editor.support_move.reset)
+            action.setEnabled(self.tool.editor.support_move.reset_button.isEnabled())
+            menu.exec(event.globalPos())
+            return
         draft = getattr(self.tool, 'draft', None)
         if draft is not None and draft.active:
             vertex = draft.hit(position, draft.handles)

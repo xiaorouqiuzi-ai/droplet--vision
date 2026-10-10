@@ -407,5 +407,12 @@
   "Visible": "显示",
   "Hidden": "隐藏",
   "Hide this template": "隐藏此模板",
-  "Frame annotations: {count} | Cine templates: {templates}": "本帧标注：{count} | Cine 模板：{templates}"
+  "Frame annotations: {count} | Cine templates: {templates}": "本帧标注：{count} | Cine 模板：{templates}",
+  "Whole-object move": "整体移动",
+  "Edit support rod group": "编辑本帧载滴杆组",
+  "Drag to translate the support rod for this frame": "拖动以整体移动本帧载滴杆",
+  "Frame offset: X: {dx:+.3f} px | Y: {dy:+.3f} px": "本帧偏移：X: {dx:+.3f} px | Y: {dy:+.3f} px",
+  "Reset frame position": "重置本帧位置",
+  "Offset ({dx:+.3f}, {dy:+.3f})": "偏移 ({dx:+.3f}, {dy:+.3f})",
+  "This is the template source frame. Moving affects this frame only, not the template.": "这是模板来源帧。移动仅作用于本帧，不会修改模板。"
 }

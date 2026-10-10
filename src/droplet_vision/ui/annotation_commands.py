@@ -76,6 +76,39 @@ class EditAnnotationCommand(AddAnnotationCommand):
         self.changed()
 
 
+class SetSupportRodTranslationCommand(SetCineTemplateCommand):
+    def __init__(self, document, frame_index, offset, changed=lambda: None):
+        super().__init__(document, document.with_support_translation(frame_index, offset), changed)
+        self.setText(tr('Whole-object move'))
+
+
+class SupportGeometryCommand(QUndoCommand):
+    """One atomic user action: materialize/edit a set, consuming sparse offset."""
+    def __init__(self, document, rows, templates, changed=lambda: None):
+        super().__init__(tr('Edit support rod group'))
+        self.document, self.rows, self.changed = document, rows, changed
+        self.before, self.after = document.cine_templates, templates
+        self.added = False
+
+    def redo(self):
+        if not self.added:
+            for old_id, record, layer in self.rows:
+                self.document.add_record(record, layer, activate=False)
+            self.added = True
+        self.document.transition(activate=[r.annotation_id for _, r, _ in self.rows],
+                                 deactivate=[old for old, _, _ in self.rows if old], reason='support_geometry')
+        if self.after != self.before:
+            self.document.replace_cine_templates(self.after)
+        self.changed()
+
+    def undo(self):
+        self.document.transition(activate=[old for old, _, _ in self.rows if old],
+                                 deactivate=[r.annotation_id for _, r, _ in self.rows], reason='undo_support_geometry')
+        if self.after != self.before:
+            self.document.replace_cine_templates(self.before)
+        self.changed()
+
+
 class DeactivateAnnotationCommand(QUndoCommand):
     def __init__(self, document, annotation_id, changed=lambda: None):
         super().__init__(tr("Deactivate annotation"))

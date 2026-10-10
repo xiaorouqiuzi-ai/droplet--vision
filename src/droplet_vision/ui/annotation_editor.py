@@ -38,6 +38,8 @@ class AnnotationEditor(QObject):
         self.taxonomy_metadata = {"reference": Path(taxonomy_path).name,
                                   "labels": [asdict(label) for label in window.annotation_panel.taxonomy.values()]}
         self.undo_stack = QUndoStack(self)
+        from .support_rod_move import SupportRodMove
+        self.support_move = SupportRodMove(self)
         self.registry = ToolRegistry()
         self.wand_panel = MagicWandPanel()
         self.wand_panel.changed.connect(lambda: self.tool.recalculate() if isinstance(self.tool, MagicWandTool) else None)
@@ -189,6 +191,7 @@ class AnnotationEditor(QObject):
     def reset(self):
         self.cancel()
         self.ready = False
+        self.support_move.clear_handle()
         self.document = self.path = self.selected_id = None
         if hasattr(self, "workflow"):
             self.workflow.notes_pending = False
@@ -208,6 +211,7 @@ class AnnotationEditor(QObject):
         self.cancel()
         self.select(None)
         self.ready = False
+        self.support_move.clear_handle()
         self.update_tools()
         self.workflow.refresh()
         return cancelled
@@ -344,6 +348,11 @@ class AnnotationEditor(QObject):
         return True
 
     def edit_annotation(self, annotation_id, geometry, attributes=None):
+        frame = self.window.current_record
+        if (self.document is not None and frame is not None
+                and any(self.document.support_translation(frame.frame_index).values())
+                and any(r.annotation_id == annotation_id for r in self.document.support_group(frame.frame_index))):
+            return self.support_move.materialize_edit(annotation_id, geometry, attributes)
         projection = self.projections().get(annotation_id)
         if projection is not None:
             if not self.can_edit(projection):
@@ -442,6 +451,9 @@ class AnnotationEditor(QObject):
         if self.document is None:
             return []
         lines = [tr('Objects: {count}').format(count=len(human_objects(self.document,self.window.layers,frame)))]
+        offset = self.document.support_translation(frame)
+        if offset['dx'] or offset['dy']:
+            lines.append(tr('Frame offset: X: {dx:+.3f} px | Y: {dy:+.3f} px').format(**offset))
         state = self.document.frame_state(frame)
         if human_state(state):
             rows = {r['state_id']:r for r in self.workflow.scheme['frame_states']['states']}
@@ -482,6 +494,18 @@ class AnnotationEditor(QObject):
 
     def refresh_selection(self):
         self.clear_handles()
+        # A source-frame translation replaces its raw row with a transient
+        # projection. Keep selection/vertices attached to what is rendered.
+        if self.document is not None and self.window.current_record is not None and self.selected_id:
+            group = self.document.support_group(self.window.current_record.frame_index)
+            if self.selected_id not in {r.annotation_id for r in group}:
+                source_id = (self.selected_id.removeprefix('cine-template:')
+                             if self.selected_id.startswith('cine-template:') else
+                             self.document.support_source_id(self.document.records.get(self.selected_id))
+                             if self.selected_id in self.document.record_layers else None)
+                replacement = next((r for r in group if self.document.support_source_id(r) == source_id), None) if source_id else None
+                if replacement is not None:
+                    self.selected_id = replacement.annotation_id
         record = self.selected_record()
         if record is None:
             self.selected_vertex = None
@@ -490,7 +514,8 @@ class AnnotationEditor(QObject):
         if hasattr(self, 'workflow') and record is not None:
             self.workflow.instance_name.setText(record.attributes.get('instance_name', ''))
         self.tool_settings.refresh()
-        if (record is None or record.annotation_id in self.hidden_ids() or not self.can_edit(record)
+        self.support_move.refresh()
+        if (self.support_move.drag is not None or record is None or record.annotation_id in self.hidden_ids() or not self.can_edit(record)
                 or self.tool is None or self.tool.geometry_type is not None):
             return
         for index, point in enumerate(self.geometry_handles(record.geometry_type, record.geometry)):
@@ -612,6 +637,9 @@ class AnnotationEditor(QObject):
         self.preview.append(item)
 
     def undo(self):
+        if self.support_move.drag is not None:
+            self.cancel()
+            return
         draft = getattr(self.tool, "draft", None)
         if draft is not None and (draft.active or draft.history or draft.future):
             draft.undo()
@@ -619,6 +647,9 @@ class AnnotationEditor(QObject):
             self.undo_stack.undo()
 
     def redo(self):
+        if self.support_move.drag is not None:
+            self.cancel()
+            return
         draft = getattr(self.tool, "draft", None)
         if draft is not None and (draft.active or draft.history or draft.future):
             draft.redo()

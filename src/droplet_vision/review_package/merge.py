@@ -58,7 +58,8 @@ def merge_review(local, package, resolutions=None):
             source_id = record.attributes.get('template_source_annotation_id')
             # Verify deterministic materialization against retained source history,
             # even if the user has since changed the active template.
-            if source_id not in local_objects or local.support_projection(source_id, record.frame_index, package=True).to_dict() != record.to_dict():
+            exported_offset = record.attributes.get('frame_translation', {'dx': 0.0, 'dy': 0.0})
+            if source_id not in local_objects or local.support_projection(source_id, record.frame_index, package=True, offset=exported_offset).to_dict() != record.to_dict():
                 raise ValueError('Invalid package template projection')
             projections[key] = source_id
             if key in local_objects and local_objects[key].to_dict() != record.to_dict():
@@ -121,6 +122,8 @@ def merge_review(local, package, resolutions=None):
                           if r.attributes.get('template_source_annotation_id') == source_id]
             template = local.cine_templates.get('support_structure', {})
             changed = bool(local_rows) or source_id not in template.get('annotation_ids', []) or not template.get('apply_entire_cine', False)
+            changed = changed or local.support_translation(row.frame_index) != base_objects[parent].attributes.get(
+                'frame_translation', {'dx': 0.0, 'dy': 0.0})
         else:
             changed = parent is not None and parent not in local.active_annotation_ids
             local_rows = [r for r in local.active_records(row.frame_index)

@@ -246,6 +246,8 @@ class MainWindow(QMainWindow):
                 records = [a for layer in self.layers for a in layer.annotations
                            if a.cine_id == self.current_record.cine_id and a.frame_index == self.current_record.frame_index]
                 projections = list(self.editor.projections().values())
+                suppressed = self.editor.document.support_suppressed_ids(self.current_record.frame_index) if self.editor.document else set()
+                records = [r for r in records if r.annotation_id not in suppressed]
                 records += projections
                 self.annotation_panel.set_records(records, record_colors(self.annotation_panel.display_config, records),
                                                   self.editor.hidden_ids(), {r.annotation_id for r in projections})
@@ -405,10 +407,14 @@ class MainWindow(QMainWindow):
             records = [a for layer in self.layers for a in layer.annotations
                        if a.cine_id == record.cine_id and a.frame_index == record.frame_index]
             projections = list(self.editor.projections().values()) if hasattr(self, 'editor') else []
+            doc = self.editor.document if hasattr(self, 'editor') else None
+            suppressed = doc.support_suppressed_ids(record.frame_index) if doc else set()
+            records = [r for r in records if r.annotation_id not in suppressed]
             hidden = self.editor.hidden_ids() if hasattr(self, 'editor') else set()
             records += projections
             colors = record_colors(self.annotation_panel.display_config, records)
-            layers = [replace(layer, annotations=list(layer.annotations) + (projections if layer.layer_id == 'manual' else []))
+            layers = [replace(layer, annotations=[r for r in layer.annotations if r.annotation_id not in suppressed]
+                              + (projections if layer.layer_id == 'manual' else []))
                       for layer in self.layers]
             self.canvas.overlays.render(layers, record.cine_id, record.frame_index, colors, hidden)
             self.annotation_panel.set_records(records, colors, hidden, {r.annotation_id for r in projections})

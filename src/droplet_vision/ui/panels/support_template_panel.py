@@ -30,6 +30,7 @@ class SupportTemplateControls(QWidget):
             return []
         return [r for r in self.editor.document.active_records(self.window.current_record.frame_index)
                 if r.label_id == 'support_structure' and r.geometry_type == 'polygon'
+                and r.annotation_id not in self.editor.document.support_suppressed_ids(self.window.current_record.frame_index)
                 and r.source == 'manual' and self.editor.can_edit(r)]
 
     def refresh(self):

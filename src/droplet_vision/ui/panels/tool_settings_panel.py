@@ -29,6 +29,7 @@ class ToolSettingsPanel(QWidget):
             self.pages[key] = page
             layout.addWidget(page)
         select_layout = self.pages['select'].layout()
+        select_layout.addWidget(editor.support_move.panel)
         select_layout.addWidget(editor.window.annotation_panel.details)
         self.vertex_info = QLabel()
         select_layout.addWidget(self.vertex_info)
@@ -63,6 +64,7 @@ class ToolSettingsPanel(QWidget):
 
     def refresh(self):
         editor = self.editor
+        editor.support_move.refresh_panel()
         draft = getattr(editor.tool, 'draft', None)
         self.confirm_button.setEnabled(bool(draft and draft.closed and draft.active))
         self.vertex_count.setText(tr('Current vertices: {count}').format(count=len(getattr(editor.tool, 'points', []))))

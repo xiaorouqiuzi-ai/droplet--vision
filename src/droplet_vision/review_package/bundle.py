@@ -70,6 +70,7 @@ def snapshot(document, frames):
     records = {r['annotation_id']: r for r in value['records']}
     active = {r.annotation_id for r in document.active_records()
               if r.frame_index in frames and document.record_layers[r.annotation_id] in ('manual', 'reviewed', 'ground_truth')
+              and r.annotation_id not in document.support_suppressed_ids(r.frame_index)
               and (r.source != 'model' or r.review_status in ('accepted', 'edited', 'ground_truth'))}
     keep = set(active)
     for key in list(active):
@@ -85,6 +86,9 @@ def snapshot(document, frames):
     # package merely to satisfy a template pointer outside its selected frames.
     templates = {k:v for k,v in value.get('cine_templates', {}).items()
                  if set(v['annotation_ids']) <= keep}
+    for template in templates.values():
+        if 'frame_overrides' in template:
+            template['frame_overrides'] = {k:v for k,v in template['frame_overrides'].items() if int(k) in frames}
     if templates:
         value['cine_templates'] = templates
     else:

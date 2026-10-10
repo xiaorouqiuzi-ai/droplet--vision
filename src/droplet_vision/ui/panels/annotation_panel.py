@@ -161,6 +161,9 @@ class AnnotationPanel(QWidget):
             detail = tr('Cine template') if record.annotation_id in projections else (
                 tr('Frame override') if record.attributes.get('creation_tool') == 'cine_support_template_override' else record.source)
             text = f"{title}\n{record.geometry_type} · {detail}"
+            offset = record.attributes.get('frame_translation')
+            if offset and record.attributes.get('creation_tool') == 'cine_template_projection':
+                text += '\n' + tr('Offset ({dx:+.3f}, {dy:+.3f})').format(**offset)
             self.items.addItem(text)
             item = self.items.item(self.items.count()-1)
             item.setData(Qt.ItemDataRole.UserRole, record.annotation_id)

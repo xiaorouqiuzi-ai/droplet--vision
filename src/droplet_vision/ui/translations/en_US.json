@@ -407,5 +407,12 @@
   "Visible": "Visible",
   "Hidden": "Hidden",
   "Hide this template": "Hide this template",
-  "Frame annotations: {count} | Cine templates: {templates}": "Frame annotations: {count} | Cine templates: {templates}"
+  "Frame annotations: {count} | Cine templates: {templates}": "Frame annotations: {count} | Cine templates: {templates}",
+  "Whole-object move": "Whole-object move",
+  "Edit support rod group": "Edit support rod group",
+  "Drag to translate the support rod for this frame": "Drag to translate the support rod for this frame",
+  "Frame offset: X: {dx:+.3f} px | Y: {dy:+.3f} px": "Frame offset: X: {dx:+.3f} px | Y: {dy:+.3f} px",
+  "Reset frame position": "Reset frame position",
+  "Offset ({dx:+.3f}, {dy:+.3f})": "Offset ({dx:+.3f}, {dy:+.3f})",
+  "This is the template source frame. Moving affects this frame only, not the template.": "This is the template source frame. Moving affects this frame only, not the template."
 }

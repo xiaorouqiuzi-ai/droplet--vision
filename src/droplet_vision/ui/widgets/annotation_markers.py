@@ -24,6 +24,7 @@ def human_frames(document, layers):
     if document is None:
         return set()
     result = {r.frame_index for r in human_objects(document, layers)}
+    result.update(int(frame) for frame in document.cine_templates.get('support_structure', {}).get('frame_overrides', {}))
     result.update(r.frame_index for r in document.frame_state_records
                   if human_state(r) and document.active_frame_state_records.get(r.frame_index) == r.record_id)
     return result

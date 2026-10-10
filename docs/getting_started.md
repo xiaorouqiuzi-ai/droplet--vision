@@ -100,6 +100,12 @@ Unchecking disables projection without deleting history. The current annotation
 list provides an eye toggle (Session-only visibility) and right-click deletion
 (deactivation with Undo/Redo). Hidden records still count as annotated frames;
 pure template projections do not. Save ViewerSession separately for visibility.
+For slight rod drift, choose **Select** on a target frame and drag the central
+**✥** handle to move the entire rod set. Each corrected frame saves only its
+absolute raw-pixel dx/dy; no per-frame polygons are copied. **Reset frame position**
+removes that offset (Undo/Redo supported). Vertex edits incorporate the current
+translation into full local geometry, independently of the global template.
+The source frame can also be shifted locally without altering the template.
 See [template details](annotation_editor.md#cine-level-droplet-support-rod-template).
 
 **Annotation → Save Annotations / Ctrl+Shift+S** saves under

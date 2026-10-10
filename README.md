@@ -154,7 +154,8 @@ See [preprocessing policy](docs/image_preprocessing_policy.md) and
 ## Annotation Workflow
 
 **Cine-level support-rod reuse:** project one template across the Cine without
-per-frame duplication, with independent local overrides and list visibility/deletion controls.
+per-frame duplication, with sparse per-frame support-rod alignment overrides, independent
+geometry corrections and list visibility/deletion controls.
 See the [template workflow](docs/annotation_editor.md#cine-level-droplet-support-rod-template).
 
 ```text
