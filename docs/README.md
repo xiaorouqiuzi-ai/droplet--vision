@@ -1,5 +1,7 @@
 # Droplet Vision Documentation
 
+[English README](../README.md) · [中文 README](../README.zh-CN.md)
+
 **Implemented** means available in source; **Experimental** means an assistance
 method with limited validated scope; **Planned** means a contract or research
 direction without an executable workflow.

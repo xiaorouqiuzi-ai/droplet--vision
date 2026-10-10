@@ -51,7 +51,7 @@ Software regression cannot establish experimental timing validity. See the
 | Home / End | First / last frame |
 | Slider / spinbox | Seek frame index; slider requests debounce for 50 ms |
 | Upper human marker | Click to jump; hover for object/state information |
-| Space / Play | Toggle wall-clock-based review playback |
+| Space (canvas, no draft) / Play | Toggle wall-clock-based review playback |
 
 **Review Speed (frames/s) / 检阅速度（帧/秒）** offers 1, 2, 5, 10, 15, 20, 30,
 60, 120, 240, 500, 1000; default 10. The value means source frames advanced per

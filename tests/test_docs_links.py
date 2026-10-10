@@ -41,6 +41,15 @@ class DocumentationLinkTests(unittest.TestCase):
         self.assertTrue(any("missing heading anchor" in e for e in errors))
         self.assertTrue(any("undefined reference" in e for e in errors))
 
+    def test_translated_readme_links_are_audited(self):
+        self.write("README.md", "# Home\n\n[中文](README.zh-CN.md)\n")
+        self.write("README.zh-CN.md", "# 中文\n\n[English](README.md)\n[指南](docs/missing.md)\n")
+        errors, files, _ = checker.audit(self.root)
+        self.assertEqual(files, 2)
+        self.assertTrue(any("README.zh-CN.md: missing target" in e for e in errors))
+        self.write("docs/missing.md", "# Guide\n")
+        self.assertEqual(checker.audit(self.root)[0], [])
+
     def test_code_examples_ignored_but_machine_paths_rejected(self):
         fence = chr(96) * 3
         self.write("README.md", f"# Home\n\n{fence}text\n[example](missing.md)\n"

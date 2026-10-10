@@ -139,7 +139,7 @@ Timeline human-annotation markers indicate active human objects or frame-state
 records, not queue completion. A DONE item may have no objects, and a marked
 frame may still be IN_PROGRESS. See [timeline navigation](cine_viewer.md).
 For external reviewers without Cine access, use a
-[portable review package](portable_review_package.md) instead of sending only
+[Annotation Package](annotation_package.md) instead of sending only
 the queue JSON.
 
 ## Scientific boundary and validation

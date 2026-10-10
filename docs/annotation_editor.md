@@ -177,7 +177,7 @@ autosave directory, and does not mark the formal document saved.
 
 Open Annotations checks Cine identity/dimensions and validates geometry/history.
 ViewerSession does not contain annotations. In package mode annotation Save routes
-to **Save Reviewed Package As…**; see [review instructions](portable_review_package.md).
+to **Save Annotation Package As…**; see [package instructions](annotation_package.md).
 
 ## Language and branding
 

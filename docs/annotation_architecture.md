@@ -99,12 +99,12 @@ objects use deterministic ordering. Layout and tool behavior remain UI concerns.
 
 ## Review and prediction boundaries
 
-Portable Review Package keeps an immutable exported base plus a derived review
+Annotation Package keeps an immutable exported base plus a derived review
 document. Import compares base IDs/ancestry against local active records. Returned
 Object changes enter Reviewed; Manual stays active and unchanged. State candidates
 are appended to history without replacing canonical active State pointers; import
 audit metadata identifies candidates and decisions. No automatic Ground Truth or
-Queue completion occurs. See [review conflicts](portable_review_package.md#returning-to-annotator).
+Queue completion occurs. See [review conflicts](annotation_package.md#returning-to-annotator).
 
 PredictionProvider/layer interfaces are extension points. Full Prediction Store,
 model execution/import, dataset export and Measurement Store remain planned; do

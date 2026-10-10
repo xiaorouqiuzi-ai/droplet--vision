@@ -99,7 +99,7 @@ def structural_errors(text: str) -> list[str]:
 
 def audit(root: Path) -> tuple[list[str], int, int]:
     root = root.resolve()
-    files = [root / "README.md"] + sorted((root / "docs").rglob("*.md"))
+    files = [root / "README.md"] + sorted(root.glob("README.*.md")) + sorted((root / "docs").rglob("*.md"))
     errors, link_count = [], 0
     for file in files:
         label = file.relative_to(root).as_posix()

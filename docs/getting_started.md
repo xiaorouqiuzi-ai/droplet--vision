@@ -6,7 +6,7 @@ a reviewer can start with only a `.dvapkg` (or legacy `.dvrpkg`).
 ## Requirements and Installation
 
 Use Python 3.12 in a dedicated environment. VisionLab is the tested development
-environment; exact versions are in [Installation](../README.md#installation).
+environment; requirements are in [Installation](../README.md#installation).
 No GPU, Torch, YOLO or OpenCV is needed. Keep `configs/` with the source checkout.
 
 ```powershell
@@ -59,8 +59,8 @@ re-enables it.
 
 Fixed buttons jump ±1/10/100/1000. Shortcuts: Left/Right, Shift+Left/Right,
 PgUp/PgDown, Ctrl+PgUp/PgDown. Home/End selects first/last frame. Click an upper
-annotation triangle to jump; hover for object/state details. Space toggles
-review playback. **Review Speed (frames/s) / 检阅速度（帧/秒）** controls how many
+annotation triangle to jump; hover for object/state details. With canvas focus and
+no draft, Space toggles review playback. **Review Speed (frames/s) / 检阅速度（帧/秒）** controls how many
 source frames advance per real second. At 1000, the view advances approximately
 5000 frames in five seconds, skipping intermediate images as needed. It does not
 require 1000 rendered images per second. Pause/resume uses the displayed frame as
@@ -82,7 +82,7 @@ Display changes never alter raw pixels, geometry or TIME64.
 4. Click at least three vertices. Click the first point, double-click or Enter
    to **close**. The dashed outline remains temporary.
 5. Adjust square vertices or hollow midpoint handles.
-6. **Confirm / Enter** creates a solid persistent annotation.
+6. **Space / Enter / Confirm** creates a solid persistent annotation.
 7. Select applicable Frame States. More States is multi-select. Use Uncertain
    and Notes when evidence needs review; inspect neighbors for dynamic judgments.
 
